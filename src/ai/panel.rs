@@ -1098,7 +1098,7 @@ impl Render for AiPanel {
             .border_1()
             .border_color(rgb(0xe3e2df))
             .rounded_lg()
-            .child(Textarea::new(&self.input))
+            .child(Textarea::new(&self.input).appearance(false))
             .child(toolbar);
 
         // --- Resizable left edge ---
@@ -1426,7 +1426,7 @@ impl AiPanel {
                     // gpui-component gives the input root a default 8px
                     // vertical padding (input_py); without zeroing it the
                     // text line paints 8px low inside the pill.
-                    .child(Textarea::new(&self.compact_input).py_0()),
+                    .child(Textarea::new(&self.compact_input).appearance(false).py_0()),
             )
             .child(
                 div()

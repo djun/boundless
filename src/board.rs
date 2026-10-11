@@ -372,6 +372,10 @@ pub struct BoardView {
     /// Workspace-relative path of the explorer row under the pointer; the
     /// ＋/✎ action buttons show only on the hovered row.
     explorer_hover: Option<String>,
+    /// Live hover tooltip for chrome buttons: (label, key hint, mouse
+    /// position, window width). Rendered by render_tooltip as a floating
+    /// dark chip below the cursor; cleared on un-hover.
+    tooltip: Option<(SharedString, Option<String>, Point<Pixels>, f32)>,
     /// Sessions grouped by workspace-relative board path, refreshed together
     /// with the tree. The explorer renders them as an expandable level under
     /// each board.
@@ -493,6 +497,7 @@ impl BoardView {
             renaming: None,
             explorer_rename_input,
             explorer_hover: None,
+            tooltip: None,
             explorer_sessions: HashMap::new(),
             chat_compact,
             update_state: crate::updater::UpdateState::default(),
@@ -7000,6 +7005,7 @@ impl Render for BoardView {
             // included); it's an explicit user-opened modal.
             .children(self.render_update_dialog(cx))
             .children(self.render_about_dialog(cx))
+            .child(self.render_tooltip())
     }
 }
 
@@ -7117,12 +7123,53 @@ fn glyph_button(
 
 /// A square icon button for the toolbar. `id` must be unique. `icon_child` is
 /// rendered inside a 20×20 box so vector icons fill the button.
+/// Toolbar hover-tooltip helper: records the board's live tooltip state
+/// (label + key hint at the cursor) on hover and clears it on leave;
+/// `render_tooltip` paints the floating chip.
+trait ToolbarTooltip: Sized {
+    fn with_toolbar_tooltip(
+        self,
+        weak: &WeakEntity<BoardView>,
+        label: &str,
+        key: Option<&str>,
+    ) -> Self;
+}
+
+impl ToolbarTooltip for Stateful<Div> {
+    fn with_toolbar_tooltip(
+        self,
+        weak: &WeakEntity<BoardView>,
+        label: &str,
+        key: Option<&str>,
+    ) -> Self {
+        let weak = weak.clone();
+        let label = label.to_string();
+        let key = key.map(str::to_string);
+        self.on_hover(move |hovered, window, cx| {
+            let hovered = *hovered;
+            weak.update(cx, |this, cx| {
+                this.tooltip = if hovered {
+                    Some((
+                        label.clone().into(),
+                        key.clone(),
+                        window.mouse_position(),
+                        f32::from(window.viewport_size().width),
+                    ))
+                } else {
+                    None
+                };
+                cx.notify();
+            })
+            .ok();
+        })
+    }
+}
+
 fn bar_icon_button(
     id: impl Into<gpui::ElementId>,
     active: bool,
     icon_child: impl IntoElement,
-) -> Stateful<Div> {
-    let mut b = div()
+) -> Stateful<Div> {    let mut b = div()
         .id(id)
         .flex()
         .items_center()
@@ -7578,34 +7625,36 @@ impl BoardView {
         use crate::icons as ic;
         let weak = cx.weak_entity();
 
-        // (tool enum, label, icon factory)
-        let tools: [(ActiveTool, &str, fn(Hsla) -> gpui::AnyElement); 10] = [
-            (ActiveTool::Select, "选择", |c| {
+        // (tool enum, label, key hint, icon factory) — keys mirror main.rs.
+        let tools: [(ActiveTool, &str, &str, fn(Hsla) -> gpui::AnyElement); 10] = [
+            (ActiveTool::Select, "选择", "V", |c| {
                 ic::select(c).into_any_element()
             }),
-            (ActiveTool::Hand, "抓手", |c| {
+            (ActiveTool::Hand, "抓手", "H", |c| {
                 ic::hand(c).into_any_element()
             }),
-            (ActiveTool::Rectangle, "矩形", |c| {
+            (ActiveTool::Rectangle, "矩形", "R", |c| {
                 ic::rectangle(c).into_any_element()
             }),
-            (ActiveTool::Diamond, "菱形", |c| {
+            (ActiveTool::Diamond, "菱形", "D", |c| {
                 ic::diamond(c).into_any_element()
             }),
-            (ActiveTool::Ellipse, "椭圆", |c| {
+            (ActiveTool::Ellipse, "椭圆", "O", |c| {
                 ic::ellipse(c).into_any_element()
             }),
-            (ActiveTool::Arrow, "箭头", |c| {
+            (ActiveTool::Arrow, "箭头", "A", |c| {
                 ic::arrow(c).into_any_element()
             }),
-            (ActiveTool::Line, "直线", |c| {
+            (ActiveTool::Line, "直线", "L", |c| {
                 ic::line(c).into_any_element()
             }),
-            (ActiveTool::Pen, "画笔", |c| ic::pen(c).into_any_element()),
-            (ActiveTool::Text, "文本", |c| {
+            (ActiveTool::Pen, "画笔", "P", |c| {
+                ic::pen(c).into_any_element()
+            }),
+            (ActiveTool::Text, "文本", "T", |c| {
                 ic::text(c).into_any_element()
             }),
-            (ActiveTool::Eraser, "橡皮", |c| {
+            (ActiveTool::Eraser, "橡皮", "E", |c| {
                 ic::eraser(c).into_any_element()
             }),
         ];
@@ -7626,7 +7675,8 @@ impl BoardView {
                     weak_explorer
                         .update(cx, |this, cx| this.toggle_explorer(cx))
                         .ok();
-                }),
+                })
+                .with_toolbar_tooltip(&weak, "目录面板", Some("Ctrl+E")),
             )
             .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1());
         // Whether a modifier is held that would trigger a temporary gesture —
@@ -7635,8 +7685,9 @@ impl BoardView {
         let ctrl_held =
             (self.modifiers.control || self.modifiers.platform) && self.editing.is_none();
         let shift_held = self.modifiers.shift && self.editing.is_none();
-        for (tool, label, icon_fn) in tools {
+        for (tool, label, key, icon_fn) in tools {
             let weak = weak.clone();
+            let weak_tt = weak.clone();
             // Highlight the tool matching a live gesture: while Ctrl-drag pans
             // (Hand) or Shift-drag sketches (Pen), the current tool is unchanged
             // but those tools should look active. Also highlight on the modifier
@@ -7655,32 +7706,33 @@ impl BoardView {
                 .on_click(move |_, window, cx| {
                     weak.update(cx, |this, cx| this.set_tool(tool, window, cx))
                         .ok();
-                }),
+                })
+                .with_toolbar_tooltip(&weak_tt, label, Some(key)),
             );
         }
 
         // 插入图片（非工具：点击弹出文件对话框，图片作为元素嵌入画布）。
         let weak_img = weak.clone();
         bar = bar.child(
-            bar_icon_button("图片", false, ic::image(icon_color(false))).on_click(
-                move |_, window, cx| {
+            bar_icon_button("图片", false, ic::image(icon_color(false)))
+                .on_click(move |_, window, cx| {
                     weak_img
                         .update(cx, |this, cx| this.insert_image_via_dialog(window, cx))
                         .ok();
-                },
-            ),
+                })
+                .with_toolbar_tooltip(&weak, "插入图片", Some("Ctrl+I")),
         );
 
         // 插入位图画布（非工具：放置一块可水彩/飞白绘画的光栅画板）。
         let weak_canvas = weak.clone();
         bar = bar.child(
-            bar_icon_button("画布", false, ic::canvas_board(icon_color(false))).on_click(
-                move |_, _, cx| {
+            bar_icon_button("画布", false, ic::canvas_board(icon_color(false)))
+                .on_click(move |_, _, cx| {
                     weak_canvas
                         .update(cx, |this, cx| this.insert_canvas(cx))
                         .ok();
-                },
-            ),
+                })
+                .with_toolbar_tooltip(&weak, "插入位图画布", None),
         );
 
         let weak_undo = weak.clone();
@@ -7692,42 +7744,42 @@ impl BoardView {
         bar = bar
             .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1())
             .child(
-                bar_icon_button("撤销", false, ic::undo(icon_color(false))).on_click(
-                    move |_, window, cx| {
+                bar_icon_button("撤销", false, ic::undo(icon_color(false)))
+                    .on_click(move |_, window, cx| {
                         weak_undo.update(cx, |this, cx| this.undo(window, cx)).ok();
-                    },
-                ),
+                    })
+                    .with_toolbar_tooltip(&weak, "撤销", Some("Ctrl+Z")),
             )
             .child(
-                bar_icon_button("重做", false, ic::redo(icon_color(false))).on_click(
-                    move |_, window, cx| {
+                bar_icon_button("重做", false, ic::redo(icon_color(false)))
+                    .on_click(move |_, window, cx| {
                         weak_redo.update(cx, |this, cx| this.redo(window, cx)).ok();
-                    },
-                ),
+                    })
+                    .with_toolbar_tooltip(&weak, "重做", Some("Ctrl+Shift+Z")),
             )
             .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1())
             .child(
-                bar_icon_button("保存", false, ic::save(icon_color(false))).on_click(
-                    move |_, _, cx| {
+                bar_icon_button("保存", false, ic::save(icon_color(false)))
+                    .on_click(move |_, _, cx| {
                         weak_save.update(cx, |this, cx| this.save(cx)).ok();
-                    },
-                ),
+                    })
+                    .with_toolbar_tooltip(&weak, "保存", Some("Ctrl+S")),
             )
             .child(
-                bar_icon_button("打开", false, ic::open(icon_color(false))).on_click(
-                    move |_, window, cx| {
+                bar_icon_button("打开", false, ic::open(icon_color(false)))
+                    .on_click(move |_, window, cx| {
                         weak_open.update(cx, |this, cx| this.open(window, cx)).ok();
-                    },
-                ),
+                    })
+                    .with_toolbar_tooltip(&weak, "打开场景", Some("Ctrl+O")),
             )
             .child(
-                bar_icon_button("AI", ai_active, ic::ai(icon_color(ai_active))).on_click(
-                    move |_, window, cx| {
+                bar_icon_button("AI", ai_active, ic::ai(icon_color(ai_active)))
+                    .on_click(move |_, window, cx| {
                         weak_ai
                             .update(cx, |this, cx| this.toggle_ai_panel(window, cx))
                             .ok();
-                    },
-                ),
+                    })
+                    .with_toolbar_tooltip(&weak, "AI无界", Some("Ctrl+B")),
             );
 
         // Center the toolbar over the *canvas* area. When the AI panel (which
@@ -9543,6 +9595,47 @@ impl BoardView {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The live hover tooltip: a dark chip below the cursor — label first,
+    /// then a translucent key badge — width-estimated and clamped to the
+    /// window's right edge.
+    fn render_tooltip(&self) -> AnyElement {
+        let Some((label, key, mouse, win_w)) = &self.tooltip else {
+            return div().hidden().into_any_element();
+        };
+        let mut est = label.chars().count() as f32 * 13.0 + 20.0;
+        if let Some(k) = key {
+            est += k.chars().count() as f32 * 8.0 + 16.0;
+        }
+        let x = (f32::from(mouse.x) - est / 2.0).clamp(4.0, (win_w - est - 4.0).max(4.0));
+        div()
+            .absolute()
+            .left(px(x))
+            .top(mouse.y + px(14.0))
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_1p5()
+            .px_2()
+            .py_1()
+            .rounded_md()
+            .bg(rgb(0x2b2a28).opacity(0.94))
+            .shadow_md()
+            .text_xs()
+            .text_color(rgb(0xf5f4f2))
+            .child(label.clone())
+            .when_some(key.clone(), |d, k| {
+                d.child(
+                    div()
+                        .px_1()
+                        .rounded_sm()
+                        .bg(rgba(0xffffff26))
+                        .text_color(rgb(0xd9d7d3))
+                        .child(k),
+                )
+            })
+            .into_any_element()
     }
 }
 

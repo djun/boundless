@@ -13,6 +13,7 @@ pub mod platform;
 pub mod render;
 pub mod scene;
 pub mod settings_page;
+pub mod theme;
 pub mod text;
 pub mod tools;
 pub mod updater;

@@ -111,6 +111,7 @@ impl SettingsPage {
 
 impl Render for SettingsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         // Header: page title + close (X) button. The menu bar's gear button
         // toggles the page; X (and Esc outside an input) closes it.
         let header = div()
@@ -121,7 +122,7 @@ impl Render for SettingsPage {
             .h(px(48.0))
             .px_4()
             .border_b_1()
-            .border_color(rgb(0xeeeeec))
+            .border_color(theme.border)
             .child(
                 div()
                     .text_base()
@@ -134,8 +135,8 @@ impl Render for SettingsPage {
                     .p_1()
                     .rounded_md()
                     .cursor_pointer()
-                    .text_color(rgb(0x666666))
-                    .hover(|s| s.bg(rgb(0xefeeec)).text_color(rgb(0x1e1e1e)))
+                    .text_color(theme.muted_foreground)
+                    .hover(|s| s.bg(theme.muted).text_color(theme.foreground))
                     .on_click(cx.listener(|this, _, _, cx| {
                         if let Some(board) = this.board.upgrade() {
                             board.update(cx, |board, cx| board.close_settings(cx));
@@ -151,17 +152,17 @@ impl Render for SettingsPage {
         let weak_save = cx.weak_entity();
         let notice = self.notice.clone();
 
-        let save_row = SettingItem::render(move |_, _, _| {
+        let save_row = SettingItem::render(move |_, _, _cx| {
             let weak_save = weak_save.clone();
             let notice_el: AnyElement = match &notice {
                 Some((true, text)) => div()
                     .text_sm()
-                    .text_color(rgb(0xc92a2a))
+                    .text_color(theme.danger)
                     .child(text.clone())
                     .into_any_element(),
                 Some((false, text)) => div()
                     .text_sm()
-                    .text_color(rgb(0x2f9e44))
+                    .text_color(theme.success)
                     .child(text.clone())
                     .into_any_element(),
                 None => div().into_any_element(),
@@ -182,9 +183,9 @@ impl Render for SettingsPage {
                         .items_center()
                         .text_sm()
                         .cursor_pointer()
-                        .bg(rgb(0x1a5fd7))
-                        .text_color(rgb(0xffffff))
-                        .hover(|s| s.bg(rgb(0x1550b8)))
+                        .bg(theme.primary)
+                        .text_color(theme.popover)
+                        .hover(|s| s.bg(theme.primary_hover))
                         .on_click(move |_, _, cx: &mut App| {
                             weak_save
                                 .update(cx, |this, cx| this.save(cx))
@@ -197,20 +198,20 @@ impl Render for SettingsPage {
 
         let ai_group = SettingGroup::new()
             .item(
-                SettingItem::render(move |_, _, _| {
-                    field_row("Base URL", &base_url_input).into_any_element()
+                SettingItem::render(move |_, _, cx| {
+                    field_row("Base URL", &base_url_input, cx).into_any_element()
                 })
                 .keywords(["Base URL", "接口地址"]),
             )
             .item(
-                SettingItem::render(move |_, _, _| {
-                    field_row("API Key", &api_key_input).into_any_element()
+                SettingItem::render(move |_, _, cx| {
+                    field_row("API Key", &api_key_input, cx).into_any_element()
                 })
                 .keywords(["API Key", "密钥"]),
             )
             .item(
-                SettingItem::render(move |_, _, _| {
-                    field_row("模型", &model_input).into_any_element()
+                SettingItem::render(move |_, _, cx| {
+                    field_row("模型", &model_input, cx).into_any_element()
                 })
                 .keywords(["模型", "model"]),
             )
@@ -231,7 +232,7 @@ impl Render for SettingsPage {
         let weak_ws = cx.weak_entity();
 
         let ws_group = SettingGroup::new().item(
-            SettingItem::render(move |_, _, _| {
+            SettingItem::render(move |_, _, _cx| {
                 div()
                     .flex()
                     .flex_col()
@@ -244,16 +245,16 @@ impl Render for SettingsPage {
                             .child(
                                 div()
                                     .text_xs()
-                                    .text_color(rgb(0x777777))
+                                    .text_color(theme.muted_foreground)
                                     .child("当前工作区"),
                             )
                             .child(
                                 div()
                                     .px_3()
                                     .py_2()
-                                    .bg(rgb(0xfbfaf9))
+                                    .bg(theme.background)
                                     .border_1()
-                                    .border_color(rgb(0xe3e2df))
+                                    .border_color(theme.border)
                                     .rounded_md()
                                     .text_sm()
                                     .child(div().truncate().child(root_text.clone())),
@@ -275,9 +276,9 @@ impl Render for SettingsPage {
                                     .items_center()
                                     .text_sm()
                                     .cursor_pointer()
-                                    .bg(rgb(0x1a5fd7))
-                                    .text_color(rgb(0xffffff))
-                                    .hover(|s| s.bg(rgb(0x1550b8)))
+                                    .bg(theme.primary)
+                                    .text_color(theme.popover)
+                                    .hover(|s| s.bg(theme.primary_hover))
                                     .on_click({
                                         let weak_ws = weak_ws.clone();
                                         move |_, _, cx: &mut App| {
@@ -320,9 +321,9 @@ impl Render for SettingsPage {
                                     .text_sm()
                                     .cursor_pointer()
                                     .border_1()
-                                    .border_color(rgb(0xd6d4d0))
-                                    .text_color(rgb(0x444444))
-                                    .hover(|s| s.bg(rgb(0xefeeec)))
+                                    .border_color(theme.border)
+                                    .text_color(theme.foreground)
+                                    .hover(|s| s.bg(theme.muted))
                                     .on_click({
                                         let weak_ws = weak_ws.clone();
                                         move |_, _, cx: &mut App| {
@@ -356,7 +357,57 @@ impl Render for SettingsPage {
             )
             .group(ws_group);
 
-        let settings = Settings::new("app-settings").pages([ai_page, ws_page]);
+        // ---- 外观 page: light / dark / system theme pick. ----
+        let theme_page = KitSettingPage::new("外观")
+            .icon(IconName::Sun)
+            .description("应用界面配色：浅色纸白 / 深色墨黑 / 跟随系统。")
+            .group(SettingGroup::new().item(
+                SettingItem::render(move |_, _, _cx| {
+                    let current = crate::theme::current_pref();
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap_2()
+                        .children(
+                            [
+                                crate::theme::ThemePref::Light,
+                                crate::theme::ThemePref::Dark,
+                                crate::theme::ThemePref::System,
+                            ]
+                            .iter()
+                            .enumerate()
+                            .map(|(i, pref)| {
+                                let active = *pref == current;
+                                div()
+                                    .id(("theme-mode", i))
+                                    .h_7()
+                                    .px_3()
+                                    .rounded_md()
+                                    .flex()
+                                    .items_center()
+                                    .text_sm()
+                                    .cursor_pointer()
+                                    .when(active, |d| {
+                                        d.bg(theme.primary).text_color(theme.popover)
+                                    })
+                                    .when(!active, |d| {
+                                        d.border_1()
+                                            .border_color(theme.border)
+                                            .text_color(theme.foreground)
+                                            .hover(|s| s.bg(theme.muted))
+                                    })
+                                    .on_click(move |_, _, cx: &mut App| {
+                                        crate::theme::set_pref(*pref, cx);
+                                    })
+                                    .child(pref.label())
+                            }),
+                        )
+                        .into_any_element()
+                })
+                .keywords(["主题", "外观", "深色", "dark", "theme"]),
+            ));
+
+        let settings = Settings::new("app-settings").pages([theme_page, ai_page, ws_page]);
 
         div()
             .id("settings-page")
@@ -364,7 +415,7 @@ impl Render for SettingsPage {
             .inset_0()
             .flex()
             .flex_col()
-            .bg(rgb(0xffffff))
+            .bg(theme.popover)
             .child(header)
             .child(
                 div()
@@ -376,11 +427,12 @@ impl Render for SettingsPage {
 }
 
 /// One labeled settings field: a small gray caption above the input.
-fn field_row(label: &'static str, field: &Entity<InputState>) -> Div {
+fn field_row(label: &'static str, field: &Entity<InputState>, cx: &App) -> Div {
+    let theme = crate::theme::chrome(cx);
     div()
         .flex()
         .flex_col()
         .gap_1()
-        .child(div().text_xs().text_color(rgb(0x777777)).child(label))
+        .child(div().text_xs().text_color(theme.muted_foreground).child(label))
         .child(Input::new(field))
 }

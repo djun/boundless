@@ -94,6 +94,10 @@ fn main() {
             // render.
             gpui_component::init(cx);
 
+            // Apply the persisted theme preference (light / dark / system)
+            // with the app's brand palette before any window opens.
+            boundless::theme::init(cx);
+
             // Set the Dock/application icon at runtime (macOS). No-op on other
             // platforms; Windows embeds its icon via build.rs.
             boundless::platform::set_app_icon();

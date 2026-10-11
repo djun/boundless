@@ -28,6 +28,7 @@ use crate::workspace::{self, Workspace};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::notification::Notification;
+use gpui_component::ActiveTheme;
 use gpui_component::{Icon, IconName, Sizable, WindowExt};
 
 /// In-progress inline rename in the explorer: the workspace-relative path of
@@ -3438,6 +3439,7 @@ impl BoardView {
     /// The left explorer panel: header (title + create buttons), the
     /// workspace tree, and a footer naming the workspace root.
     fn render_explorer(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let theme = crate::theme::chrome(cx);
         let active_key = self.active_board_key();
         let mut tree = div()
             .id("explorer-tree")
@@ -3467,7 +3469,7 @@ impl BoardView {
             .pt(px(top_inset))
             .h(px(42.0 + top_inset))
             .border_b_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .child(
                 div()
                     .text_sm()
@@ -3480,14 +3482,14 @@ impl BoardView {
                     .flex_row()
                     .gap_1()
                     .child(
-                        explorer_mini_button("explorer-new-board", "＋白板").on_click(cx.listener(
+                        explorer_mini_button("explorer-new-board", "＋白板", cx).on_click(cx.listener(
                             |this, _, window, cx| {
                                 this.create_board_in(None, window, cx);
                             },
                         )),
                     )
                     .child(
-                        explorer_mini_button("explorer-new-folder", "＋文件夹").on_click(
+                        explorer_mini_button("explorer-new-folder", "＋文件夹", cx).on_click(
                             cx.listener(|this, _, _, cx| {
                                 this.create_folder_in(None, cx);
                             }),
@@ -3500,9 +3502,9 @@ impl BoardView {
             .px_3()
             .py_2()
             .border_t_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .child(
-                div().text_xs().text_color(rgb(0x999999)).child(
+                div().text_xs().text_color(theme.muted_foreground).child(
                     div()
                         .truncate()
                         .child(format!("{}", self.workspace.root().display())),
@@ -3516,9 +3518,9 @@ impl BoardView {
             .bottom_0()
             .left_0()
             .w(px(Self::EXPLORER_W))
-            .bg(rgb(0xfbfaf9))
+            .bg(theme.background)
             .border_r_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .cursor(CursorStyle::Arrow)
             .flex()
             .flex_col()
@@ -3538,6 +3540,7 @@ impl BoardView {
         active_key: &Option<String>,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        let theme = crate::theme::chrome(cx);
         use crate::icons as ic;
         let mut out = Vec::new();
         let indent = px(6.0 + 14.0 * depth as f32);
@@ -3562,8 +3565,8 @@ impl BoardView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(0xaaaaaa))
-                    .hover(|s| s.bg(rgb(0xe3e2df)).text_color(rgb(0x555555)))
+                    .text_color(theme.muted_foreground)
+                    .hover(|s| s.bg(theme.border).text_color(theme.foreground))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.create_board_in(Some(rel_add.clone()), window, cx);
@@ -3578,8 +3581,8 @@ impl BoardView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(0xaaaaaa))
-                    .hover(|s| s.bg(rgb(0xe3e2df)).text_color(rgb(0x555555)))
+                    .text_color(theme.muted_foreground)
+                    .hover(|s| s.bg(theme.border).text_color(theme.foreground))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         let current = Path::new(&rel_ren)
@@ -3588,7 +3591,7 @@ impl BoardView {
                             .unwrap_or_default();
                         this.start_renaming(rel_ren.clone(), true, current, window, cx);
                     }))
-                    .child(ic::pencil(icon_color(false)));
+                    .child(ic::pencil(icon_color(false, cx)));
                 let renaming_this = renaming_rel.as_deref() == Some(rel.as_str());
                 let hovered_this =
                     self.explorer_hover.as_deref() == Some(rel.as_str()) && !renaming_this;
@@ -3618,8 +3621,8 @@ impl BoardView {
                     // Edit mode: the label becomes the inline input; the
                     // row's own click/hover are suspended until commit.
                     row = row
-                        .bg(rgb(0xffffff))
-                        .child(Icon::new(IconName::Folder).text_color(rgb(0x777777)))
+                        .bg(theme.popover)
+                        .child(Icon::new(IconName::Folder).text_color(theme.muted_foreground))
                         .child(
                             div().flex_1().min_w_0().h_6().child(
                                 Input::new(&self.explorer_rename_input)
@@ -3630,8 +3633,8 @@ impl BoardView {
                 } else {
                     row = row
                         .cursor_pointer()
-                        .text_color(rgb(0x3b3b3b))
-                        .hover(|s| s.bg(rgb(0xefeeec)))
+                        .text_color(theme.foreground)
+                        .hover(|s| s.bg(theme.muted))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             let removed = this.explorer_expanded.remove(&rel_toggle);
                             if !removed {
@@ -3645,9 +3648,9 @@ impl BoardView {
                             } else {
                                 IconName::ChevronRight
                             })
-                            .text_color(rgb(0xaaaaaa)),
+                            .text_color(theme.muted_foreground),
                         )
-                        .child(Icon::new(IconName::Folder).text_color(rgb(0x777777)))
+                        .child(Icon::new(IconName::Folder).text_color(theme.muted_foreground))
                         .child(div().flex_1().truncate().child(name.clone()));
                     // Row actions show only while the pointer is on the row,
                     // keeping the resting tree quiet.
@@ -3699,7 +3702,7 @@ impl BoardView {
                             } else {
                                 IconName::ChevronRight
                             })
-                            .text_color(rgb(0xaaaaaa)),
+                            .text_color(theme.muted_foreground),
                         )
                 });
                 // ＋ starts a fresh conversation for this board; ✎ renames it.
@@ -3712,8 +3715,8 @@ impl BoardView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(0xaaaaaa))
-                    .hover(|s| s.bg(rgb(0xe3e2df)).text_color(rgb(0x555555)))
+                    .text_color(theme.muted_foreground)
+                    .hover(|s| s.bg(theme.border).text_color(theme.foreground))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.new_session_for(rel_new_session.clone(), window, cx);
@@ -3727,8 +3730,8 @@ impl BoardView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(0xaaaaaa))
-                    .hover(|s| s.bg(rgb(0xe3e2df)).text_color(rgb(0x555555)))
+                    .text_color(theme.muted_foreground)
+                    .hover(|s| s.bg(theme.border).text_color(theme.foreground))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         // Boards show/rename the stem only — the extension is
@@ -3739,7 +3742,7 @@ impl BoardView {
                             .unwrap_or_default();
                         this.start_renaming(rel_ren.clone(), false, current, window, cx);
                     }))
-                    .child(ic::pencil(icon_color(false)));
+                    .child(ic::pencil(icon_color(false, cx)));
                 let current_session = self
                     .ai_panel
                     .as_ref()
@@ -3768,11 +3771,11 @@ impl BoardView {
                     }));
                 if renaming_this {
                     row = row
-                        .bg(rgb(0xffffff))
+                        .bg(theme.popover)
                         .child(Icon::new(IconName::File).text_color(if is_active {
-                            rgb(0x1a5fd7)
+                            theme.primary
                         } else {
-                            rgb(0x777777)
+                            theme.muted_foreground
                         }))
                         .child(
                             div().flex_1().min_w_0().h_6().child(
@@ -3784,9 +3787,9 @@ impl BoardView {
                 } else {
                     row = row.cursor_pointer();
                     if is_active {
-                        row = row.bg(rgb(0xdce8ff)).text_color(rgb(0x1a5fd7));
+                        row = row.bg(theme.accent).text_color(theme.primary);
                     } else {
-                        row = row.text_color(rgb(0x3b3b3b)).hover(|s| s.bg(rgb(0xefeeec)));
+                        row = row.text_color(theme.foreground).hover(|s| s.bg(theme.muted));
                     }
                     row = row.on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                         // Like folders, a single click toggles the level;
@@ -3819,9 +3822,9 @@ impl BoardView {
                     }
                     row = row
                         .child(Icon::new(IconName::File).text_color(if is_active {
-                            rgb(0x1a5fd7)
+                            theme.primary
                         } else {
-                            rgb(0x777777)
+                            theme.muted_foreground
                         }))
                         .child(div().flex_1().truncate().child(name.clone()));
                     // Row actions show only while the pointer is on the row,
@@ -3857,16 +3860,16 @@ impl BoardView {
                                 .gap_1()
                                 .text_xs()
                                 .cursor_pointer()
-                                .when(is_current, |d| d.text_color(rgb(0x1a5fd7)))
-                                .when(!is_current, |d| d.text_color(rgb(0x666666)))
-                                .hover(|s| s.bg(rgb(0xefeeec)))
+                                .when(is_current, |d| d.text_color(theme.primary))
+                                .when(!is_current, |d| d.text_color(theme.muted_foreground))
+                                .hover(|s| s.bg(theme.muted))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.open_session(rel_session.clone(), sid.clone(), window, cx);
                                 }))
                                 .child(Icon::new(IconName::Bot).text_color(if is_current {
-                                    rgb(0x1a5fd7)
+                                    theme.primary
                                 } else {
-                                    rgb(0x999999)
+                                    theme.muted_foreground
                                 }))
                                 .child(div().flex_1().truncate().child(preview))
                                 // Count sits apart in a lighter shade so
@@ -3874,7 +3877,7 @@ impl BoardView {
                                 .child(
                                     div()
                                         .flex_shrink_0()
-                                        .text_color(rgb(0xbbbbbb))
+                                        .text_color(theme.muted_foreground)
                                         .child(format!("{}条", session.count)),
                                 )
                                 .into_any_element(),
@@ -6495,6 +6498,7 @@ impl BoardView {
 
 impl Render for BoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         // Flush pending notices as toasts. Notice sources often run without a
         // Window (async tasks, action handlers); render is where one is finally
         // available, so parked messages become ephemeral toasts here instead of
@@ -6840,7 +6844,7 @@ impl Render for BoardView {
             .overflow_hidden()
             .bg(rgb(BG_COLOR))
             .font_family(".SystemUIFont")
-            .text_color(rgb(0x1e1e1e))
+            .text_color(theme.foreground)
             .cursor(cursor)
             .on_action(cx.listener(|this, _: &Undo, window, cx| this.undo(window, cx)))
             .on_action(cx.listener(|this, _: &Redo, window, cx| this.redo(window, cx)))
@@ -6902,10 +6906,13 @@ impl Render for BoardView {
                 this.check_for_updates(cx, false)
             }))
             .on_action(cx.listener(|_, _: &About, window, cx| {
-                window.open_dialog(cx, |dialog, _, _| {
+                let theme = crate::theme::chrome(cx);
+                window.open_dialog(cx, move |dialog, _, _| {
+                    let theme = theme;
                     dialog
                         .title("关于无界白板")
-                        .content(|content, _, _| {
+                        .content(move |content, _, _| {
+                            let theme = theme;
                             content.child(
                                 div()
                                     .flex()
@@ -6917,11 +6924,11 @@ impl Render for BoardView {
                                         env!("CARGO_PKG_VERSION")
                                     )))
                                     .child(
-                                        div().text_sm().text_color(rgb(0x666666))
+                                        div().text_sm().text_color(theme.muted_foreground)
                                             .child("无限手绘白板 —— AI 智能体直接在画布上作画。"),
                                     )
                                     .child(
-                                        div().text_sm().text_color(rgb(0x666666))
+                                        div().text_sm().text_color(theme.muted_foreground)
                                             .child("以 AGPL-3.0 许可证开源。"),
                                     ),
                             )
@@ -7012,7 +7019,7 @@ impl Render for BoardView {
                             .child(self.render_element_info(cx))
                             .child(self.render_zoom_bar(cx))
                             .child(self.render_page_bar(cx))
-                            .child(self.render_notice_bar())
+                            .child(self.render_notice_bar(cx))
                             .children(self.render_context_menu(cx))
                             .when(self.explorer_open, |d| d.child(self.render_explorer(cx)))
                             .children(self.ai_panel.clone())
@@ -7061,27 +7068,28 @@ const ROUGHNESSES: [f32; 3] = [0.0, 1.0, 2.0];
 /// The button icon is an "A" drawn at increasing sizes, Excalidraw-style.
 const TEXT_SIZES: [(f64, f32); 4] = [(16.0, 10.0), (24.0, 13.0), (36.0, 16.0), (56.0, 19.0)];
 
-const ICON_ACTIVE: u32 = 0x1a5fd7;
-const ICON_NORMAL: u32 = 0x3b3b3b;
 
-fn bar_container() -> Div {
+fn bar_container(cx: &App) -> Div {
+    let theme = cx.theme();
     div()
         .flex()
         .flex_row()
         .items_center()
         .gap_1()
         .p_1()
-        // Translucent white: the canvas shows through faintly so the floating
-        // chrome reads as part of the board instead of stickers on it.
-        .bg(rgba(0xffffffb3))
+        // Translucent surface: the canvas shows through faintly so the
+        // floating chrome reads as part of the board instead of stickers
+        // on it. Theme-aware in both light and dark modes.
+        .bg(theme.popover.opacity(0.7))
         .border_1()
-        .border_color(rgba(0xe3e2df99))
+        .border_color(theme.border.opacity(0.6))
         .rounded_lg()
         .shadow_lg()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
 }
 
-fn bar_button(label: &'static str, active: bool) -> Stateful<Div> {
+fn bar_button(label: &'static str, active: bool, cx: &App) -> Stateful<Div> {
+    let theme = cx.theme();
     let mut b = div()
         .id(label)
         .flex()
@@ -7094,9 +7102,9 @@ fn bar_button(label: &'static str, active: bool) -> Stateful<Div> {
         .cursor_pointer()
         .child(label);
     if active {
-        b = b.bg(rgb(0xdce8ff)).text_color(rgb(0x1a5fd7));
+        b = b.bg(theme.accent).text_color(theme.accent_foreground);
     } else {
-        b = b.hover(|s| s.bg(rgb(0xf1f0ee)));
+        b = b.hover(|s| s.bg(theme.muted));
     }
     b
 }
@@ -7110,7 +7118,9 @@ fn glyph_button(
     glyph_px: f32,
     text: &'static str,
     font_family: Option<&'static str>,
+    cx: &App,
 ) -> Stateful<Div> {
+    let theme = cx.theme();
     let mut glyph = div()
         .text_size(px(glyph_px))
         .line_height(px(glyph_px + 4.0))
@@ -7126,15 +7136,16 @@ fn glyph_button(
         .size_7()
         .rounded_md()
         .cursor_pointer()
-        .text_color(color_u32(
-            if active { ICON_ACTIVE } else { ICON_NORMAL },
-            1.0,
-        ))
+        .text_color(if active {
+            theme.accent_foreground
+        } else {
+            theme.foreground
+        })
         .child(glyph);
     if active {
-        b = b.bg(rgb(0xdce8ff));
+        b = b.bg(theme.accent);
     } else {
-        b = b.hover(|s| s.bg(rgb(0xf1f0ee)));
+        b = b.hover(|s| s.bg(theme.muted));
     }
     b
 }
@@ -7187,7 +7198,10 @@ fn bar_icon_button(
     id: impl Into<gpui::ElementId>,
     active: bool,
     icon_child: impl IntoElement,
-) -> Stateful<Div> {    let mut b = div()
+    cx: &App,
+) -> Stateful<Div> {
+    let theme = cx.theme();
+    let mut b = div()
         .id(id)
         .flex()
         .items_center()
@@ -7197,16 +7211,21 @@ fn bar_icon_button(
         .cursor_pointer()
         .child(div().size(px(crate::icons::S)).child(icon_child));
     if active {
-        b = b.bg(rgb(0xdce8ff));
+        b = b.bg(theme.accent);
     } else {
-        b = b.hover(|s| s.bg(rgb(0xf1f0ee)));
+        b = b.hover(|s| s.bg(theme.muted));
     }
     b
 }
 
-/// Icon color: blue when active, dark gray otherwise.
-fn icon_color(active: bool) -> Hsla {
-    color_u32(if active { ICON_ACTIVE } else { ICON_NORMAL }, 1.0)
+/// Icon color: accent when active, foreground otherwise.
+fn icon_color(active: bool, cx: &App) -> Hsla {
+    let theme = cx.theme();
+    if active {
+        theme.accent_foreground
+    } else {
+        theme.foreground
+    }
 }
 
 /// Debug-build tracing for the auto-update flow. stderr goes nowhere in
@@ -7222,8 +7241,9 @@ fn upd_trace(msg: impl std::fmt::Display) {
 }
 
 /// A horizontal separator for the context menu.
-fn menu_separator() -> Div {
-    div().h(px(1.0)).w_full().bg(rgb(0xe3e2df))
+fn menu_separator(cx: &App) -> Div {
+    let theme = crate::theme::chrome(cx);
+    div().h(px(1.0)).w_full().bg(theme.border)
 }
 
 // --- Windows in-app menu bar ---------------------------------------------
@@ -7265,7 +7285,9 @@ fn window_control_button(
     hover_bg: impl Into<Hsla>,
     hover_fg: impl Into<Hsla>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    cx: &App,
 ) -> Stateful<Div> {
+    let theme = crate::theme::chrome(cx);
     let hover_bg = hover_bg.into();
     let hover_fg = hover_fg.into();
     div()
@@ -7275,7 +7297,7 @@ fn window_control_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_color(rgb(0x1e1e1e))
+        .text_color(theme.foreground)
         .hover(|s| s.bg(hover_bg).text_color(hover_fg))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(on_click)
@@ -7296,7 +7318,8 @@ fn group_sessions_by_board() -> HashMap<String, Vec<SessionMeta>> {
 }
 
 /// Small text button for the explorer header (＋白板 / ＋文件夹).
-fn explorer_mini_button(id: &'static str, label: &'static str) -> Stateful<Div> {
+fn explorer_mini_button(id: &'static str, label: &'static str, cx: &App) -> Stateful<Div> {
+    let theme = crate::theme::chrome(cx);
     div()
         .id(id)
         .h_6()
@@ -7305,9 +7328,9 @@ fn explorer_mini_button(id: &'static str, label: &'static str) -> Stateful<Div> 
         .flex()
         .items_center()
         .text_xs()
-        .text_color(rgb(0x666666))
+        .text_color(theme.muted_foreground)
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(0xefeeec)).text_color(rgb(0x1e1e1e)))
+        .hover(|s| s.bg(theme.muted).text_color(theme.foreground))
         .child(label)
 }
 
@@ -7321,21 +7344,23 @@ fn context_menu_row(
     shortcut: Option<SharedString>,
     enabled: bool,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    cx: &App,
 ) -> Stateful<Div> {
+    let theme = crate::theme::chrome(cx);
     let label_color = if enabled {
-        rgb(0x1e1e1e)
+        theme.foreground
     } else {
-        rgb(0xbbbbbb)
+        theme.muted_foreground
     };
     let icon_color = if enabled {
-        rgb(0x3b3b3b)
+        theme.foreground
     } else {
-        rgb(0xbbbbbb)
+        theme.muted_foreground
     };
     let shortcut_color = if enabled {
-        rgb(0x999999)
+        theme.muted_foreground
     } else {
-        rgb(0xcccccc)
+        theme.border
     };
     let mut row = div()
         .id(id)
@@ -7351,7 +7376,7 @@ fn context_menu_row(
     if enabled {
         row = row
             .cursor_pointer()
-            .hover(|s| s.bg(rgb(0xf1f0ee)))
+            .hover(|s| s.bg(theme.muted))
             .on_click(on_click);
     }
     // Fixed-width icon column keeps labels aligned whether or not a row has
@@ -7379,6 +7404,7 @@ impl BoardView {
     /// the window is already maximized. Close quits (single-window app:
     /// closing the window quits the process, matching the "退出" menu item).
     fn window_controls(&self, window: &Window, cx: &mut Context<Self>) -> Div {
+    let theme = crate::theme::chrome(cx);
         let max_icon = if window.is_maximized() {
             IconName::WindowRestore
         } else {
@@ -7397,7 +7423,7 @@ impl BoardView {
                 let tint = if failed {
                     color_u32(0xcf222e, 1.0)
                 } else {
-                    icon_color(false)
+                    icon_color(false, cx)
                 };
                 Some(
                     div()
@@ -7407,7 +7433,7 @@ impl BoardView {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(rgb(0xf1f0ee)))
+                        .hover(|s| s.bg(theme.muted))
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(|this, _, window, cx| {
                             let weak = cx.weak_entity();
@@ -7430,7 +7456,7 @@ impl BoardView {
                                             .w(px(7.0))
                                             .h(px(7.0))
                                             .rounded_full()
-                                            .bg(rgb(0x1a5fd7)),
+                                            .bg(theme.primary),
                                     )
                                 }),
                         )
@@ -7446,8 +7472,8 @@ impl BoardView {
                     .items_center()
                     .justify_center()
                     .gap_1()
-                    .text_color(rgb(0x888888))
-                    .child(div().w(px(ic::S)).h(px(ic::S)).child(ic::download(icon_color(false))))
+                    .text_color(theme.muted_foreground)
+                    .child(div().w(px(ic::S)).h(px(ic::S)).child(ic::download(icon_color(false, cx))))
                     .child(
                         div()
                             .text_xs()
@@ -7468,8 +7494,8 @@ impl BoardView {
             .flex()
             .items_center()
             .justify_center()
-            .text_color(rgb(0x1e1e1e))
-            .hover(|s| s.bg(rgb(0xf1f0ee)))
+            .text_color(theme.foreground)
+            .hover(|s| s.bg(theme.muted))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)))
             .child(Icon::new(IconName::Settings));
@@ -7483,17 +7509,15 @@ impl BoardView {
             .child(window_control_button(
                 "win-min",
                 IconName::WindowMinimize,
-                rgb(0xf1f0ee),
-                rgb(0x1e1e1e),
-                |_, window, _| window.minimize_window(),
-            ))
+                theme.muted,
+                theme.foreground,
+                |_, window, _| window.minimize_window(), cx))
             .child(window_control_button(
                 "win-max",
                 max_icon,
-                rgb(0xf1f0ee),
-                rgb(0x1e1e1e),
-                |_, window, _| crate::platform::toggle_maximize(window),
-            ))
+                theme.muted,
+                theme.foreground,
+                |_, window, _| crate::platform::toggle_maximize(window), cx))
             // Soft red hover (light tint bg + red icon) instead of a harsh
             // solid red square - still reads as the "close" button but is
             // gentler, and matches the gray hovers of the other two in
@@ -7504,8 +7528,7 @@ impl BoardView {
                 IconName::WindowClose,
                 rgb(0xffebe9),
                 rgb(0xcf222e),
-                |_, _, cx| cx.quit(),
-            ))
+                |_, _, cx| cx.quit(), cx))
     }
 
     fn apply_style_to_selection(
@@ -7640,6 +7663,7 @@ impl BoardView {
     }
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         use crate::icons as ic;
         let weak = cx.weak_entity();
 
@@ -7677,7 +7701,7 @@ impl BoardView {
             }),
         ];
 
-        let mut bar = bar_container();
+        let mut bar = bar_container(cx);
         // 白板（目录面板）开关居首：面板停靠在左侧，开关放工具栏最左端；
         // 面板打开后工具栏整体右移，按钮恰好贴着面板右缘。
         let weak_explorer = weak.clone();
@@ -7687,8 +7711,7 @@ impl BoardView {
                 bar_icon_button(
                     "白板",
                     explorer_active,
-                    ic::explorer(icon_color(explorer_active)),
-                )
+                    ic::explorer(icon_color(explorer_active, cx)), cx)
                 .on_click(move |_, _, cx| {
                     weak_explorer
                         .update(cx, |this, cx| this.toggle_explorer(cx))
@@ -7696,7 +7719,7 @@ impl BoardView {
                 })
                 .with_toolbar_tooltip(&weak, "目录面板", Some("Ctrl+E")),
             )
-            .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1());
+            .child(div().w(px(1.0)).h_5().bg(theme.border).mx_1());
         // Whether a modifier is held that would trigger a temporary gesture —
         // used to highlight Hand (Ctrl) / Pen (Shift) even before the button is
         // pressed, for immediate visual feedback. Ignored while editing text.
@@ -7719,8 +7742,7 @@ impl BoardView {
                 bar_icon_button(
                     gpui::ElementId::Name(label.into()),
                     active,
-                    icon_fn(icon_color(active)),
-                )
+                    icon_fn(icon_color(active, cx)), cx)
                 .on_click(move |_, window, cx| {
                     weak.update(cx, |this, cx| this.set_tool(tool, window, cx))
                         .ok();
@@ -7732,7 +7754,7 @@ impl BoardView {
         // 插入图片（非工具：点击弹出文件对话框，图片作为元素嵌入画布）。
         let weak_img = weak.clone();
         bar = bar.child(
-            bar_icon_button("图片", false, ic::image(icon_color(false)))
+            bar_icon_button("图片", false, ic::image(icon_color(false, cx)), cx)
                 .on_click(move |_, window, cx| {
                     weak_img
                         .update(cx, |this, cx| this.insert_image_via_dialog(window, cx))
@@ -7744,7 +7766,7 @@ impl BoardView {
         // 插入位图画布（非工具：放置一块可水彩/飞白绘画的光栅画板）。
         let weak_canvas = weak.clone();
         bar = bar.child(
-            bar_icon_button("画布", false, ic::canvas_board(icon_color(false)))
+            bar_icon_button("画布", false, ic::canvas_board(icon_color(false, cx)), cx)
                 .on_click(move |_, _, cx| {
                     weak_canvas
                         .update(cx, |this, cx| this.insert_canvas(cx))
@@ -7760,38 +7782,38 @@ impl BoardView {
         let weak_ai = weak.clone();
         let ai_active = self.ai_panel.is_some();
         bar = bar
-            .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1())
+            .child(div().w(px(1.0)).h_5().bg(theme.border).mx_1())
             .child(
-                bar_icon_button("撤销", false, ic::undo(icon_color(false)))
+                bar_icon_button("撤销", false, ic::undo(icon_color(false, cx)), cx)
                     .on_click(move |_, window, cx| {
                         weak_undo.update(cx, |this, cx| this.undo(window, cx)).ok();
                     })
                     .with_toolbar_tooltip(&weak, "撤销", Some("Ctrl+Z")),
             )
             .child(
-                bar_icon_button("重做", false, ic::redo(icon_color(false)))
+                bar_icon_button("重做", false, ic::redo(icon_color(false, cx)), cx)
                     .on_click(move |_, window, cx| {
                         weak_redo.update(cx, |this, cx| this.redo(window, cx)).ok();
                     })
                     .with_toolbar_tooltip(&weak, "重做", Some("Ctrl+Shift+Z")),
             )
-            .child(div().w(px(1.0)).h_5().bg(rgb(0xe3e2df)).mx_1())
+            .child(div().w(px(1.0)).h_5().bg(theme.border).mx_1())
             .child(
-                bar_icon_button("保存", false, ic::save(icon_color(false)))
+                bar_icon_button("保存", false, ic::save(icon_color(false, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak_save.update(cx, |this, cx| this.save(cx)).ok();
                     })
                     .with_toolbar_tooltip(&weak, "保存", Some("Ctrl+S")),
             )
             .child(
-                bar_icon_button("打开", false, ic::open(icon_color(false)))
+                bar_icon_button("打开", false, ic::open(icon_color(false, cx)), cx)
                     .on_click(move |_, window, cx| {
                         weak_open.update(cx, |this, cx| this.open(window, cx)).ok();
                     })
                     .with_toolbar_tooltip(&weak, "打开场景", Some("Ctrl+O")),
             )
             .child(
-                bar_icon_button("AI", ai_active, ic::ai(icon_color(ai_active)))
+                bar_icon_button("AI", ai_active, ic::ai(icon_color(ai_active, cx)), cx)
                     .on_click(move |_, window, cx| {
                         weak_ai
                             .update(cx, |this, cx| this.toggle_ai_panel(window, cx))
@@ -7836,6 +7858,7 @@ impl BoardView {
     }
 
     fn render_style_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         let weak = cx.weak_entity();
         let text_tool = self.tool == ActiveTool::Text;
         let show = self.tool.is_drawing() || text_tool || !self.selection.is_empty();
@@ -7905,7 +7928,7 @@ impl BoardView {
             show_shape_options && !(linear_tool && self.selection.is_empty()) && !linear_targets;
         let _ = linear_sel; // used via linear_targets when applicable
 
-        let mut bar = bar_container().flex_col().items_start().gap_2().p_2();
+        let mut bar = bar_container(cx).flex_col().items_start().gap_2().p_2();
 
         // Stroke colors. Leading 无 swatch = no stroke (borderless shapes);
         // hidden for pure-text selections where stroke IS the text color.
@@ -7917,7 +7940,7 @@ impl BoardView {
                 .id("stroke-none")
                 .size_5()
                 .rounded_sm()
-                .bg(rgb(0xffffff))
+                .bg(theme.popover)
                 .border_1()
                 .cursor_pointer()
                 .flex()
@@ -7927,7 +7950,7 @@ impl BoardView {
             swatch = if no_stroke {
                 swatch.border_color(rgb(SELECTION_COLOR)).border_2()
             } else {
-                swatch.border_color(rgb(0xcccccc))
+                swatch.border_color(theme.border)
             };
             row = row.child(swatch.on_click(move |_, _, cx| {
                 weak.update(cx, |this, cx| {
@@ -7949,7 +7972,7 @@ impl BoardView {
             swatch = if active {
                 swatch.border_color(rgb(SELECTION_COLOR)).border_2()
             } else {
-                swatch.border_color(rgb(0xcccccc))
+                swatch.border_color(theme.border)
             };
             row = row.child(swatch.on_click(move |_, _, cx| {
                 weak.update(cx, |this, cx| {
@@ -7984,13 +8007,13 @@ impl BoardView {
                 swatch = match color {
                     Some(c) => swatch.bg(rgb(c)).child(""),
                     None => swatch
-                        .bg(rgb(0xffffff))
+                        .bg(theme.popover)
                         .child(crate::icons::no_fill(color_u32(0x999999, 1.0))),
                 };
                 swatch = if active {
                     swatch.border_color(rgb(SELECTION_COLOR)).border_2()
                 } else {
-                    swatch.border_color(rgb(0xcccccc))
+                    swatch.border_color(theme.border)
                 };
                 row = row.child(swatch.on_click(move |_, _, cx| {
                     weak.update(cx, |this, cx| {
@@ -8036,7 +8059,7 @@ impl BoardView {
                             .text_xs()
                             .child(label)
                             .when(active, |d| d.border_color(rgb(SELECTION_COLOR)).border_2())
-                            .when(!active, |d| d.border_color(rgb(0xcccccc)))
+                            .when(!active, |d| d.border_color(theme.border))
                             .on_click(move |_, _, cx| {
                                 weak.update(cx, |this, cx| {
                                     this.apply_style_to_selection(
@@ -8087,7 +8110,7 @@ impl BoardView {
                             .text_xs()
                             .child(label)
                             .when(active, |d| d.border_color(rgb(SELECTION_COLOR)).border_2())
-                            .when(!active, |d| d.border_color(rgb(0xcccccc)))
+                            .when(!active, |d| d.border_color(theme.border))
                             .on_click(move |_, _, cx| {
                                 weak.update(cx, |this, cx| {
                                     this.apply_style_to_selection(|s| s.brush = br, cx)
@@ -8135,7 +8158,7 @@ impl BoardView {
                             .text_xs()
                             .child(label)
                             .when(active, |d| d.border_color(rgb(SELECTION_COLOR)).border_2())
-                            .when(!active, |d| d.border_color(rgb(0xcccccc)))
+                            .when(!active, |d| d.border_color(theme.border))
                             .on_click(move |_, _, cx| {
                                 weak.update(cx, |this, cx| {
                                     this.canvas_brush = br;
@@ -8189,8 +8212,7 @@ impl BoardView {
                         active,
                         *glyph_px,
                         "A",
-                        None,
-                    )
+                        None, cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| this.apply_style_to_text(|fs| *fs = size, cx))
                             .ok();
@@ -8225,8 +8247,7 @@ impl BoardView {
                         active,
                         15.0,
                         "Aa",
-                        Some(family),
-                    )
+                        Some(family), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| this.set_text_font(family, cx))
                             .ok();
@@ -8258,8 +8279,7 @@ impl BoardView {
                     bar_icon_button(
                         gpui::ElementId::named_usize("al", ix),
                         active,
-                        ic::align_icon(icon_color(active), a),
-                    )
+                        ic::align_icon(icon_color(active, cx), a), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| this.set_text_align(a, cx)).ok();
                     }),
@@ -8279,8 +8299,7 @@ impl BoardView {
                     bar_icon_button(
                         gpui::ElementId::named_usize("sw", width as usize),
                         active,
-                        ic::stroke_width_icon(icon_color(active), px_w),
-                    )
+                        ic::stroke_width_icon(icon_color(active, cx), px_w), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| {
                             this.apply_shape_style(|s| s.stroke_width = width, cx)
@@ -8302,8 +8321,7 @@ impl BoardView {
                     bar_icon_button(
                         gpui::ElementId::named_usize("pt", 0),
                         active,
-                        ic::taper_icon(icon_color(active)),
-                    )
+                        ic::taper_icon(icon_color(active, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| {
                             this.pen_taper = !this.pen_taper;
@@ -8323,8 +8341,7 @@ impl BoardView {
                     bar_icon_button(
                         gpui::ElementId::named_usize("rg", roughness.to_bits() as usize),
                         active,
-                        ic::roughness_icon(icon_color(active), roughness),
-                    )
+                        ic::roughness_icon(icon_color(active, cx), roughness), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| {
                             this.apply_shape_style(|s| s.roughness = roughness, cx)
@@ -8367,8 +8384,7 @@ impl BoardView {
                     bar_icon_button(
                         gpui::ElementId::named_usize("lt", ix),
                         active,
-                        ic::line_type_icon(icon_color(active), lt),
-                    )
+                        ic::line_type_icon(icon_color(active, cx), lt), cx)
                     .on_click(move |_, _, cx| {
                         weak.update(cx, |this, cx| {
                             this.apply_shape_style(|s| s.line_type = lt, cx)
@@ -8395,6 +8411,7 @@ impl BoardView {
     /// element's type, short id, position/size, and text. Only renders when
     /// exactly one element is selected. Avoids the AI panel when it's open.
     fn render_element_info(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         // Show only for a single selection.
         let el_ref = if self.selection.len() == 1 {
             self.scene.get(self.selection[0])
@@ -8434,9 +8451,9 @@ impl BoardView {
             .gap_0p5()
             .px_3()
             .py_2()
-            .bg(rgb(0xffffff))
+            .bg(theme.popover)
             .border_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .rounded_lg()
             .shadow_lg()
             .text_xs()
@@ -8451,9 +8468,9 @@ impl BoardView {
                     .child(
                         div()
                             .id("element-info-id")
-                            .text_color(rgb(0x999999))
+                            .text_color(theme.muted_foreground)
                             .cursor_pointer()
-                            .hover(|s| s.text_color(rgb(0x1a5fd7)))
+                            .hover(|s| s.text_color(theme.primary))
                             .child(format!("#{short_id} 📋"))
                             .on_click({
                                 let full_id = el_ref.id.to_string();
@@ -8470,12 +8487,12 @@ impl BoardView {
                     .flex()
                     .flex_row()
                     .gap_3()
-                    .text_color(rgb(0x666666))
+                    .text_color(theme.muted_foreground)
                     .child(div().child(pos_text))
                     .child(div().child(size_text)),
             );
         if let Some(t) = text_content {
-            card = card.child(div().text_color(rgb(0x444444)).child(format!("文字: {t}")));
+            card = card.child(div().text_color(theme.foreground).child(format!("文字: {t}")));
         }
         // Position: right-aligned, but avoid the AI panel.
         if panel_open {
@@ -8491,6 +8508,7 @@ impl BoardView {
     /// handle of a selected line/arrow. Dismissed by `on_mouse_down_out`
     /// (any click outside the card), Esc, or picking an item.
     fn render_context_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let theme = crate::theme::chrome(cx);
         let cm = self.context_menu.as_ref()?;
         let weak = cx.weak_entity();
         let ids = self.selection.clone();
@@ -8516,9 +8534,9 @@ impl BoardView {
             .left(left)
             .top(top)
             .min_w(menu_w)
-            .bg(rgb(0xffffff))
+            .bg(theme.popover)
             .border_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .rounded_md()
             .shadow_lg()
             .p_1()
@@ -8547,9 +8565,8 @@ impl BoardView {
                 true,
                 move |_, _, cx| {
                     let _ = weak.update(cx, |b, cx| b.delete_vertex(idx, cx));
-                },
-            ));
-            card = card.child(menu_separator());
+                }, cx));
+            card = card.child(menu_separator(cx));
         }
 
         // Layer ops. Disabled (greyed, non-interactive) when the move can't apply.
@@ -8590,11 +8607,10 @@ impl BoardView {
                 enabled,
                 move |_, _, cx| {
                     let _ = weak.update(cx, |b, cx| b.reorder_layers(op, cx));
-                },
-            ));
+                }, cx));
         }
 
-        card = card.child(menu_separator());
+        card = card.child(menu_separator(cx));
 
         // Delete selection.
         let weak = weak.clone();
@@ -8609,8 +8625,7 @@ impl BoardView {
                     b.delete_selection(cx);
                     b.context_menu = None;
                 });
-            },
-        ));
+            }, cx));
 
         Some(card.into_any_element())
     }
@@ -8620,6 +8635,7 @@ impl BoardView {
     /// child of the board's outer column so it occupies layout space at the top;
     /// macOS uses the native `set_menus` bar instead and never calls this.
     fn render_menu_bar(&self, window: &Window, cx: &mut Context<Self>) -> Div {
+        let theme = crate::theme::chrome(cx);
         let labels: [&str; 4] = ["文件", "编辑", "视图", "帮助"];
         let mut bar = div()
             .flex()
@@ -8629,8 +8645,8 @@ impl BoardView {
             .h(px(MENU_BAR_HEIGHT))
             .flex_shrink_0()
             .border_b_1()
-            .border_color(rgb(0xe3e2df))
-            .bg(rgb(0xffffff))
+            .border_color(theme.border)
+            .bg(theme.popover)
             // The bar inherits the canvas tool cursor (crosshair/ibeam/...)
             // from the board's outer div otherwise; force the normal arrow so
             // the title bar always looks like a title bar. Menu labels below
@@ -8647,10 +8663,10 @@ impl BoardView {
                     .items_center()
                     .justify_center()
                     .text_sm()
-                    .text_color(rgb(0x1e1e1e))
+                    .text_color(theme.foreground)
                     .cursor_pointer()
-                    .when(active, |d| d.bg(rgb(0xf1f0ee)))
-                    .hover(|s| s.bg(rgb(0xf1f0ee)))
+                    .when(active, |d| d.bg(theme.muted))
+                    .hover(|s| s.bg(theme.muted))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.menubar_open = if this.menubar_open == Some(i) {
                             None
@@ -8700,6 +8716,7 @@ impl BoardView {
     /// canvas. Reuses the context-menu card pattern (white card, click-away
     /// dismiss via `on_mouse_down_out`, `context_menu_row` rows).
     fn render_menu_dropdown(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let theme = crate::theme::chrome(cx);
         let i = self.menubar_open?;
         let weak = cx.weak_entity();
         let left = px(MENU_PAD + i as f32 * MENU_LABEL_W);
@@ -8710,9 +8727,9 @@ impl BoardView {
             .top(px(MENU_BAR_HEIGHT))
             .left(left)
             .w(px(180.0))
-            .bg(rgb(0xffffff))
+            .bg(theme.popover)
             .border_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .rounded_md()
             .shadow_lg()
             .p_1()
@@ -8747,8 +8764,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-open",
@@ -8763,8 +8779,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-save",
@@ -8779,9 +8794,8 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
-                card = card.child(menu_separator());
+                    }, cx));
+                card = card.child(menu_separator(cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-quit",
@@ -8796,8 +8810,7 @@ impl BoardView {
                         })
                         .ok();
                         cx.quit();
-                    },
-                ));
+                    }, cx));
             }
             1 => {
                 // 编辑
@@ -8815,8 +8828,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-redo",
@@ -8831,8 +8843,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
             }
             2 => {
                 // 视图
@@ -8850,8 +8861,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-zout",
@@ -8866,9 +8876,8 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
-                card = card.child(menu_separator());
+                    }, cx));
+                card = card.child(menu_separator(cx));
                 let w = weak.clone();
                 card = card.child(context_menu_row(
                     "m-zreset",
@@ -8883,8 +8892,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
             }
             3 => {
                 // 帮助
@@ -8902,8 +8910,7 @@ impl BoardView {
                             cx.notify();
                         })
                         .ok();
-                    },
-                ));
+                    }, cx));
                 let w_about = weak.clone();
                 card = card.child(context_menu_row(
                     "m-about",
@@ -8918,10 +8925,12 @@ impl BoardView {
                                 cx.notify();
                             })
                             .ok();
-                        window.open_dialog(cx, |dialog, _, _| {
+                        window.open_dialog(cx, move |dialog, _, _| {
+                            let theme = theme;
                             dialog
                                 .title("关于无界白板")
-                                .content(|content, _, _| {
+                                .content(move |content, _, _| {
+                                    let theme = theme;
                                     content.child(
                                         div()
                                             .flex()
@@ -8933,12 +8942,12 @@ impl BoardView {
                                                 env!("CARGO_PKG_VERSION")
                                             )))
                                             .child(
-                                                div().text_sm().text_color(rgb(0x666666)).child(
+                                                div().text_sm().text_color(theme.muted_foreground).child(
                                                     "无限手绘白板 —— AI 智能体直接在画布上作画。",
                                                 ),
                                             )
                                             .child(
-                                                div().text_sm().text_color(rgb(0x666666))
+                                                div().text_sm().text_color(theme.muted_foreground)
                                                     .child("以 AGPL-3.0 许可证开源。"),
                                             ),
                                     )
@@ -8949,8 +8958,7 @@ impl BoardView {
                                         .on_ok(|_, _, _| true),
                                 )
                         });
-                    },
-                ));
+                    }, cx));
             }
             _ => return None,
         }
@@ -8959,6 +8967,7 @@ impl BoardView {
     }
 
     fn render_zoom_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         use crate::icons as ic;
         let weak = cx.weak_entity();
         let percent = format!("{:.0}%", self.camera.zoom * 100.0);
@@ -8992,7 +9001,7 @@ impl BoardView {
             .when(!panel_open, |d| d.right(px(INSET)))
             .flex()
             .child(
-                bar_container()
+                bar_container(cx)
                     .child({
                         // Texture picker: a popover like the AI bar's 低/中/高 —
                         // the button toggles the panel, options pick directly;
@@ -9003,7 +9012,7 @@ impl BoardView {
                             .child(
                                 // No active tint on the button itself — every
                                 // texture state reads the same (白板 included).
-                                bar_button(tex_label, false).on_click(
+                                bar_button(tex_label, false, cx).on_click(
                                     move |_, _, cx| {
                                         weak_tex
                                             .update(cx, |this, cx| {
@@ -9025,9 +9034,9 @@ impl BoardView {
                                 .left(px(-6.0))
                                 .mb_1p5()
                                 .w_12()
-                                .bg(rgb(0xffffff))
+                                .bg(theme.popover)
                                 .border_1()
-                                .border_color(rgb(0xe3e2df))
+                                .border_color(theme.border)
                                 .rounded_md()
                                 .shadow_lg()
                                 .p_1()
@@ -9063,11 +9072,11 @@ impl BoardView {
                                     .cursor_pointer()
                                     .child(label);
                                 if active {
-                                    row = row.bg(rgb(0xe8f0fe)).text_color(rgb(0x1a5fd7));
+                                    row = row.bg(theme.accent).text_color(theme.primary);
                                 } else {
                                     row = row
-                                        .hover(|s| s.bg(rgb(0xf0efec)))
-                                        .text_color(rgb(0x555555));
+                                        .hover(|s| s.bg(theme.muted))
+                                        .text_color(theme.foreground);
                                 }
                                 // Select on mouse-down (not click): the popup
                                 // unmounts on selection, swallowing the click's up.
@@ -9088,7 +9097,7 @@ impl BoardView {
                         }
                         tex_button
                     })
-                    .child(bar_button("−", false).on_click(move |_, _, cx| {
+                    .child(bar_button("−", false, cx).on_click(move |_, _, cx| {
                         weak_out.update(cx, |this, cx| this.zoom_by(0.8, cx)).ok();
                     }))
                     .child(
@@ -9098,7 +9107,7 @@ impl BoardView {
                             .text_center()
                             .text_sm()
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(0xf1f0ee)).rounded_md())
+                            .hover(|s| s.bg(theme.muted).rounded_md())
                             // Double-click the percentage to reset zoom to 100%,
                             // replacing the dedicated reset button (Excalidraw/
                             // Figma behavior). GPUI has no on_double_click helper,
@@ -9110,11 +9119,11 @@ impl BoardView {
                             })
                             .child(percent),
                     )
-                    .child(bar_button("+", false).on_click(move |_, _, cx| {
+                    .child(bar_button("+", false, cx).on_click(move |_, _, cx| {
                         weak_in.update(cx, |this, cx| this.zoom_by(1.25, cx)).ok();
                     }))
                     .child(
-                        bar_icon_button("zoom-fit", false, ic::zoom_fit(icon_color(false)))
+                        bar_icon_button("zoom-fit", false, ic::zoom_fit(icon_color(false, cx)), cx)
                             .on_click(move |_, _, cx| {
                                 weak_fit
                                     .update(cx, |this, cx| {
@@ -9128,7 +9137,7 @@ impl BoardView {
                             }),
                     )
                     .child(
-                        bar_icon_button("toggle-grid", grid_on, ic::grid(icon_color(grid_on)))
+                        bar_icon_button("toggle-grid", grid_on, ic::grid(icon_color(grid_on, cx)), cx)
                             .on_click(move |_, _, cx| {
                                 weak_grid
                                     .update(cx, |this, cx| {
@@ -9162,8 +9171,8 @@ impl BoardView {
                                     .rounded_full()
                                     .cursor_pointer()
                                     .border_1()
-                                    .when(active, |d| d.border_2().border_color(rgb(0x2563eb)))
-                                    .when(!active, |d| d.border_color(rgb(0xc9c9c9)))
+                                    .when(active, |d| d.border_2().border_color(theme.primary))
+                                    .when(!active, |d| d.border_color(theme.border))
                                     .bg(match color {
                                         Some(c) => color_u32(c, 1.0),
                                         None => white(),
@@ -9199,7 +9208,7 @@ impl BoardView {
             .unwrap_or(if total > 0 { 1 } else { 0 });
         let indicator = format!("{current}/{total}");
 
-        bar_container()
+        bar_container(cx)
             .absolute()
             .bottom_3()
             .left_3()
@@ -9214,8 +9223,7 @@ impl BoardView {
                         false,
                         Icon::new(IconName::Plus)
                             .size(px(crate::icons::S))
-                            .text_color(icon_color(false)),
-                    )
+                            .text_color(icon_color(false, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak_add_empty
                             .update(cx, |this, cx| this.add_page_manual(cx))
@@ -9230,8 +9238,7 @@ impl BoardView {
                         false,
                         Icon::new(IconName::ChevronLeft)
                             .size(px(crate::icons::S))
-                            .text_color(icon_color(false)),
-                    )
+                            .text_color(icon_color(false, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak_prev
                             .update(cx, |this, cx| this.goto_prev_page(cx))
@@ -9252,15 +9259,14 @@ impl BoardView {
                         false,
                         Icon::new(IconName::ChevronRight)
                             .size(px(crate::icons::S))
-                            .text_color(icon_color(false)),
-                    )
+                            .text_color(icon_color(false, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak_next
                             .update(cx, |this, cx| this.goto_next_page(cx))
                             .ok();
                     }),
                 )
-                .child(bar_button("▶", false).on_click(move |_, window, cx| {
+                .child(bar_button("▶", false, cx).on_click(move |_, window, cx| {
                     weak_present
                         .update(cx, |this, cx| this.start_presenting(window, cx))
                         .ok();
@@ -9271,8 +9277,7 @@ impl BoardView {
                         false,
                         Icon::new(IconName::Plus)
                             .size(px(crate::icons::S))
-                            .text_color(icon_color(false)),
-                    )
+                            .text_color(icon_color(false, cx)), cx)
                     .on_click(move |_, _, cx| {
                         weak_add
                             .update(cx, |this, cx| this.add_page_manual(cx))
@@ -9280,7 +9285,7 @@ impl BoardView {
                     }),
                 )
                 .child(
-                    bar_icon_button("page-del", false, ic::trash(icon_color(false))).on_click(
+                    bar_icon_button("page-del", false, ic::trash(icon_color(false, cx)), cx).on_click(
                         move |_, _, cx| {
                             weak_del
                                 .update(cx, |this, cx| this.delete_current_page(cx))
@@ -9310,7 +9315,7 @@ impl BoardView {
             .justify_center()
             .when(self.present_chrome_visible, |d| {
                 d.child(
-                    bar_container()
+                    bar_container(cx)
                         .gap_1p5()
                         .child(
                             bar_icon_button(
@@ -9318,8 +9323,7 @@ impl BoardView {
                                 false,
                                 Icon::new(IconName::ChevronLeft)
                                     .size(ic_s)
-                                    .text_color(icon_color(false)),
-                            )
+                                    .text_color(icon_color(false, cx)), cx)
                             .on_click(move |_, _, cx| {
                                 weak_prev
                                     .update(cx, |this, cx| this.goto_prev_page(cx))
@@ -9339,8 +9343,7 @@ impl BoardView {
                                 false,
                                 Icon::new(IconName::ChevronRight)
                                     .size(ic_s)
-                                    .text_color(icon_color(false)),
-                            )
+                                    .text_color(icon_color(false, cx)), cx)
                             .on_click(move |_, _, cx| {
                                 weak_next
                                     .update(cx, |this, cx| this.goto_next_page(cx))
@@ -9349,15 +9352,19 @@ impl BoardView {
                         )
                         // A slim divider, then exit — the keyboard hint the
                         // old text bar carried, as a button.
-                        .child(div().w(px(1.0)).h_5().bg(rgba(0xe3e2df99)))
+                        .child(
+                            div()
+                                .w(px(1.0))
+                                .h_5()
+                                .bg(crate::theme::chrome(cx).border.opacity(0.6)),
+                        )
                         .child(
                             bar_icon_button(
                                 "present-exit",
                                 false,
                                 Icon::new(IconName::Close)
                                     .size(ic_s)
-                                    .text_color(icon_color(false)),
-                            )
+                                    .text_color(icon_color(false, cx)), cx)
                             .on_click(move |_, window, cx| {
                                 weak_exit
                                     .update(cx, |this, cx| this.exit_presenting(window, cx))
@@ -9381,7 +9388,8 @@ impl BoardView {
         }
     }
 
-    fn render_notice_bar(&self) -> impl IntoElement {
+    fn render_notice_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         let mut text = String::new();
         if let Some(path) = &self.file_path {
             text.push_str(
@@ -9404,7 +9412,7 @@ impl BoardView {
             .left_3()
             .when(self.explorer_open, |d| d.left(px(Self::EXPLORER_W + 12.0)))
             .text_xs()
-            .text_color(rgb(0x888888))
+            .text_color(theme.muted_foreground)
             .child(text)
     }
 
@@ -9459,6 +9467,7 @@ fn open_update_dialog(
     state: &crate::updater::UpdateState,
     weak: &WeakEntity<BoardView>,
 ) {
+        let theme = crate::theme::chrome(cx);
     use crate::updater::UpdateState;
     let (title, body, restartable) = match state {
         UpdateState::Ready { version, notes, .. } => {
@@ -9494,7 +9503,7 @@ fn open_update_dialog(
             content.child(
                 div()
                     .text_sm()
-                    .text_color(rgb(0x666666))
+                    .text_color(theme.muted_foreground)
                     .py_1()
                     .child(body.clone()),
             )

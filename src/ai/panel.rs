@@ -873,6 +873,7 @@ impl AiPanel {
 
 impl Render for AiPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
         // Consume the deferred input-clear flag. send_message (called from a
         // subscribe callback that has no Window) sets it; here we have a Window
         // so InputState::set_value can run. Clear the flag first to avoid
@@ -905,7 +906,7 @@ impl Render for AiPanel {
             .px_3()
             .py_2()
             .border_b_1()
-            .border_color(rgb(0xeeeeec))
+            .border_color(theme.border)
             .child(
                 div()
                     .text_sm()
@@ -919,12 +920,12 @@ impl Render for AiPanel {
                     .gap_1()
                     .child(
                         // Collapse back to the compact bottom bar.
-                        header_action("收起").on_click(cx.listener(
+                        header_action("收起", cx).on_click(cx.listener(
                             |this, _, window, cx| this.set_compact(true, window, cx),
                         )),
                     )
                     .child(
-                        header_action("新建")
+                        header_action("新建", cx)
                             .on_click(cx.listener(|this, _, _, cx| this.clear_chat(cx))),
                     ),
             );
@@ -936,7 +937,7 @@ impl Render for AiPanel {
         let mut messages = div().flex().flex_col().gap_3().px_4().py_4().w_full();
         if self.messages.is_empty() && !streaming {
             messages =
-                messages.child(div().text_sm().text_color(rgb(0x999999)).child(
+                messages.child(div().text_sm().text_color(theme.muted_foreground).child(
                     "描述你想画的内容，例如「画一个登录流程图」，AI 会直接把它画到画布上。",
                 ));
         }
@@ -961,7 +962,7 @@ impl Render for AiPanel {
                         .gap_1()
                         .items_center()
                         .text_xs()
-                        .text_color(rgb(0x999999))
+                        .text_color(theme.muted_foreground)
                         .child(
                             div()
                                 .w(px(14.0))
@@ -1009,9 +1010,9 @@ impl Render for AiPanel {
             div()
                 .px_3()
                 .py_2()
-                .bg(rgb(0xfff0f0))
+                .bg(theme.danger.opacity(0.08))
                 .text_xs()
-                .text_color(rgb(0xc92a2a))
+                .text_color(theme.danger)
                 .child(err.clone())
         } else {
             div().hidden()
@@ -1057,10 +1058,10 @@ impl Render for AiPanel {
                 div()
                     .id("model-label")
                     .text_xs()
-                    .text_color(rgb(0x999999))
+                    .text_color(theme.muted_foreground)
                     .child(format!("模型: {model_name}"))
                     .cursor_pointer()
-                    .hover(|s| s.text_color(rgb(0x555555)))
+                    .hover(|s| s.text_color(theme.foreground))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.board
                             .update(cx, |board, cx| board.open_settings(window, cx))
@@ -1080,9 +1081,9 @@ impl Render for AiPanel {
             .mx_3()
             .mb_2()
             .mt_1()
-            .bg(rgb(0xffffff))
+            .bg(theme.popover)
             .border_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .rounded_lg()
             .child(Textarea::new(&self.input).appearance(false))
             .child(toolbar);
@@ -1108,7 +1109,7 @@ impl Render for AiPanel {
             .left_0()
             .w(px(4.0))
             .cursor(CursorStyle::ResizeLeftRight)
-            .hover(|s| s.bg(rgb(0x1a5fd7)).opacity(0.12))
+            .hover(|s| s.bg(theme.primary).opacity(0.12))
             .on_drag(ResizeDrag, |_v, _offset, _w, cx| {
                 // The drag value only exists to drive on_drag_move; the width
                 // is computed from the live pointer in on_drag_move.
@@ -1124,9 +1125,9 @@ impl Render for AiPanel {
             .bottom_0()
             .right_0()
             .w(px(self.width))
-            .bg(rgb(0xfbfaf9))
+            .bg(theme.background)
             .border_l_1()
-            .border_color(rgb(0xe3e2df))
+            .border_color(theme.border)
             .shadow_lg()
             .flex()
             .flex_col()
@@ -1197,6 +1198,7 @@ impl AiPanel {
     /// toolbar. The compact bar uses the popup picker instead
     /// ([`Self::render_reasoning_picker`]).
     fn reasoning_control(&self, cx: &mut Context<Self>) -> Div {
+        let theme = crate::theme::chrome(cx);
         let current_reasoning = self.reasoning;
         let mut control = div()
             .flex()
@@ -1204,7 +1206,7 @@ impl AiPanel {
             .rounded_md()
             .overflow_hidden()
             .border_1()
-            .border_color(rgb(0xd6d4d0));
+            .border_color(theme.border);
         for (i, level) in [
             ReasoningLevel::Low,
             ReasoningLevel::Medium,
@@ -1222,9 +1224,9 @@ impl AiPanel {
                 .cursor_pointer()
                 .child(level.label());
             if active {
-                seg = seg.bg(rgb(0x1a5fd7)).text_color(rgb(0xffffff));
+                seg = seg.bg(theme.primary).text_color(theme.popover);
             } else {
-                seg = seg.hover(|s| s.bg(rgb(0xefeeec))).text_color(rgb(0x555555));
+                seg = seg.hover(|s| s.bg(theme.muted)).text_color(theme.foreground);
             }
             control = control.child(seg.on_click(cx.listener(move |this, _, _, cx| {
                 this.set_reasoning(level, cx);
@@ -1238,6 +1240,7 @@ impl AiPanel {
     /// a child of the button so `on_mouse_down_out` can close it on any
     /// outside click, while clicks on the button itself just toggle.
     fn render_reasoning_picker(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let theme = crate::theme::chrome(cx);
         let current_reasoning = self.reasoning;
         let mut button = div()
             .id("reasoning-picker")
@@ -1248,9 +1251,9 @@ impl AiPanel {
             .flex()
             .items_center()
             .text_xs()
-            .text_color(rgb(0x555555))
+            .text_color(theme.foreground)
             .cursor_pointer()
-            .hover(|s| s.bg(rgb(0xf0efec)))
+            .hover(|s| s.bg(theme.muted))
             .child(self.reasoning.label())
             .on_click(cx.listener(|this, _, _, cx| {
                 this.reasoning_popup_open = !this.reasoning_popup_open;
@@ -1264,9 +1267,9 @@ impl AiPanel {
                 .right_0()
                 .mb_1p5()
                 .w_12()
-                .bg(rgb(0xffffff))
+                .bg(theme.popover)
                 .border_1()
-                .border_color(rgb(0xe3e2df))
+                .border_color(theme.border)
                 .rounded_md()
                 .shadow_lg()
                 .p_1()
@@ -1299,9 +1302,9 @@ impl AiPanel {
                     .cursor_pointer()
                     .child(level.label());
                 if active {
-                    row = row.bg(rgb(0xe8f0fe)).text_color(rgb(0x1a5fd7));
+                    row = row.bg(theme.accent).text_color(theme.primary);
                 } else {
-                    row = row.hover(|s| s.bg(rgb(0xf0efec))).text_color(rgb(0x555555));
+                    row = row.hover(|s| s.bg(theme.muted)).text_color(theme.foreground);
                 }
                 // Select on mouse-down (not click): the popup unmounts on
                 // selection, which would swallow the click's up event.
@@ -1324,6 +1327,7 @@ impl AiPanel {
     /// reply / error). The agent's actions unfold on the canvas — watching
     /// the board is the point; the full transcript lives one toggle away.
     fn render_compact(&mut self, win_w: f32, cx: &mut Context<Self>) -> Div {
+        let theme = crate::theme::chrome(cx);
         let streaming = self.streaming.is_some();
         let reasoning_control = self.render_reasoning_picker(cx);
 
@@ -1336,29 +1340,17 @@ impl AiPanel {
             .unwrap_or(0.0);
         let span = win_w - explorer_w;
 
-        // Send/stop: rounded-square per the reference style. Idle = accent
-        // blue with an up-arrow; streaming = dark with a light square as the
-        // stop glyph.
-        let send_btn = div()
-            .id("send-btn-compact")
-            .w_7()
-            .h_7()
-            .rounded_lg()
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .when(streaming, |d| {
-                d.bg(rgb(0x3d3d3d))
-                    .hover(|s| s.bg(rgb(0x2f2f2f)))
-                    .child(div().w_3().h_3().rounded_sm().bg(rgb(0xe3e3e3)))
+        // Send/stop: the same primary Button the docked panel uses, so the
+        // two input surfaces read identically (blue arrow idle, stop while
+        // streaming).
+        let send_btn = Button::new("send-btn-compact")
+            .icon(if streaming {
+                IconName::Close
+            } else {
+                IconName::ArrowUp
             })
-            .when(!streaming, |d| {
-                d.bg(rgb(0x1a5fd7))
-                    .text_color(rgb(0xffffff))
-                    .hover(|s| s.bg(rgb(0x1550b3)))
-                    .child(Icon::new(IconName::ArrowUp).size_4())
-            })
+            .small()
+            .primary()
             .on_click(cx.listener(move |this, _, _window, cx| {
                 if streaming {
                     this.stop_streaming(cx);
@@ -1377,20 +1369,21 @@ impl AiPanel {
             .flex()
             .items_center()
             .justify_center()
-            .text_color(rgb(0x999999))
+            .text_color(theme.muted_foreground)
             .cursor_pointer()
-            .hover(|s| s.bg(rgb(0xefeeec)).text_color(rgb(0x1e1e1e)))
+            .hover(|s| s.bg(theme.muted).text_color(theme.foreground))
             .on_click(cx.listener(|this, _, window, cx| this.set_compact(false, window, cx)))
             .child(Icon::new(IconName::PanelRightOpen));
 
         let bar = div()
             .w(px(compact_bar_width(span)))
             .max_w_full()
-            // Translucent white to match the board's floating chrome (toolbar
-            // / zoom / page bars) — the canvas shows through faintly.
-            .bg(rgba(0xffffffb3))
+            // Translucent surface to match the board's floating chrome
+            // (toolbar / zoom / page bars) — the canvas shows through
+            // faintly. Follows the theme in both light and dark modes.
+            .bg(theme.popover.opacity(0.7))
             .border_1()
-            .border_color(rgba(0xd6d4d099))
+            .border_color(theme.border.opacity(0.6))
             .rounded_full()
             .shadow_lg()
             .flex()
@@ -1439,7 +1432,7 @@ impl AiPanel {
             .gap_1()
             .pb_3()
             .px_3();
-        match self.compact_status_line(span) {
+        match self.compact_status_line(span, cx) {
             Some(line) => wrapper.child(line).child(bar),
             None => wrapper.child(bar),
         }
@@ -1448,20 +1441,21 @@ impl AiPanel {
     /// The one line above the compact bar: the streaming tail (reasoning /
     /// tool / text), then the last reply once done, with errors and panel
     /// notices taking precedence. None = keep the canvas clean.
-    fn compact_status_line(&mut self, span: f32) -> Option<AnyElement> {
+    fn compact_status_line(&mut self, span: f32, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let theme = crate::theme::chrome(cx);
         let (text, color) = if let Some(err) = &self.error {
-            (err.clone(), rgb(0xc92a2a))
+            (err.clone(), theme.danger)
         } else if let Some(notice) = &self.notice {
-            (notice.clone(), rgb(0xe8590c))
+            (notice.clone(), theme.danger)
         } else if let Some(stream) = &self.streaming {
-            (streaming_status_text(&stream.steps, &stream.buffer), rgb(0x555555))
+            (streaming_status_text(&stream.steps, &stream.buffer), theme.foreground)
         } else {
             // Idle: keep the last reply visible (tail) until the next send.
             let last = self.messages.last()?;
             if last.role != "assistant" || last.content.trim().is_empty() {
                 return None;
             }
-            (tail_chars(&last.content, 64), rgb(0x999999))
+            (tail_chars(&last.content, 64), theme.muted_foreground)
         };
         Some(
             div()
@@ -1538,6 +1532,7 @@ impl AiPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let theme = crate::theme::chrome(cx);
         match item {
             super::client::AssistantStep::Reasoning { text } => {
                 // Live reasoning defaults open while streaming, closed after.
@@ -1554,8 +1549,7 @@ impl AiPanel {
                                 StyledBodyKind::Reasoning,
                                 text.clone(),
                                 &self.live_reasoning_scroll,
-                                cx.entity_id(),
-                            )
+                                cx.entity_id(), cx)
                             .into_any_element(),
                         )
                     } else {
@@ -1582,7 +1576,7 @@ impl AiPanel {
                     Some(IconName::Bot),
                     "思考过程",
                     open,
-                    rgb(0x888888),
+                    theme.muted_foreground,
                     None,
                     cx.listener(move |this, _, _, cx| {
                         if this.open_stream_steps.contains(&idx) {
@@ -1592,8 +1586,7 @@ impl AiPanel {
                         }
                         cx.notify();
                     }),
-                    body,
-                )
+                    body, cx)
                 .into_any_element()
             }
             super::client::AssistantStep::Tool {
@@ -1613,13 +1606,14 @@ impl AiPanel {
                 // Success stays silent — a long drawing session reads calmer
                 // without a column of green ticks. Only pending / failed mark.
                 let status = if !*done {
-                    Some(("…", rgb(0xaaaaaa)))
+                    Some(("…", theme.muted_foreground))
                 } else if *error {
-                    Some(("✕", rgb(0xc92a2a)))
+                    Some(("✕", theme.danger))
                 } else {
                     None
                 };
-                let (title, title_color) = tool_header(name, args);
+                let title = tool_header(name, args);
+                let title_color = theme.foreground;
                 step_toggle(
                     ElementId::named_usize("tool-toggle", idx),
                     format!("tool-header-{idx}"),
@@ -1646,8 +1640,7 @@ impl AiPanel {
                             window,
                             cx,
                         )
-                    }),
-                )
+                    }), cx)
                 .into_any_element()
             }
             // Text steps: inline rendered, not collapsible. `default_open` carries
@@ -1686,6 +1679,7 @@ impl AiPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let theme = crate::theme::chrome(cx);
         let key = (msg_idx, step_idx);
         match item {
             super::client::AssistantStep::Reasoning { text } => {
@@ -1696,7 +1690,7 @@ impl AiPanel {
                     Some(IconName::Bot),
                     "思考过程",
                     open,
-                    rgb(0x888888),
+                    theme.muted_foreground,
                     None,
                     cx.listener(move |this, _, _, cx| {
                         if this.open_done_steps.contains(&key) {
@@ -1716,8 +1710,7 @@ impl AiPanel {
                             window,
                             cx,
                         )
-                    }),
-                )
+                    }), cx)
                 .into_any_element()
             }
             super::client::AssistantStep::Tool {
@@ -1733,13 +1726,14 @@ impl AiPanel {
                 // Success stays silent — a long drawing session reads calmer
                 // without a column of green ticks. Only pending / failed mark.
                 let status = if !*done {
-                    Some(("…", rgb(0xaaaaaa)))
+                    Some(("…", theme.muted_foreground))
                 } else if *error {
-                    Some(("✕", rgb(0xc92a2a)))
+                    Some(("✕", theme.danger))
                 } else {
                     None
                 };
-                let (title, title_color) = tool_header(name, args);
+                let title = tool_header(name, args);
+                let title_color = theme.foreground;
                 step_toggle(
                     ElementId::named_usize("tool-toggle-done", msg_idx * 100000 + step_idx),
                     format!("tool-header-done-{msg_idx}-{step_idx}"),
@@ -1766,8 +1760,7 @@ impl AiPanel {
                             window,
                             cx,
                         )
-                    }),
-                )
+                    }), cx)
                 .into_any_element()
             }
             // Text steps: inline rendered, selectable, not collapsible.
@@ -1853,7 +1846,7 @@ impl AiPanel {
             return step.into_any_element();
         }
 
-        message_bubble(idx, &msg.role, content).into_any_element()
+        message_bubble(idx, &msg.role, content, cx).into_any_element()
     }
 
     /// Collapsed summary of a run of consecutive tool calls: one quiet row
@@ -1868,6 +1861,7 @@ impl AiPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let theme = crate::theme::chrome(cx);
         // Group keys live above any real step index in the same namespace.
         let key = (msg_idx, 90_000 + group_ord);
         let open = self.open_done_steps.contains(&key);
@@ -1876,7 +1870,7 @@ impl AiPanel {
             .filter(|s| matches!(s, super::client::AssistantStep::Tool { error: true, .. }))
             .count();
         let trailing =
-            (errs > 0).then(|| div().text_color(rgb(0xc92a2a)).child(format!("{errs} 失败")));
+            (errs > 0).then(|| div().text_color(theme.danger).child(format!("{errs} 失败")));
         let body = open.then(|| {
             let mut col = div().flex().flex_col().gap_1().pl_3();
             for (n, item) in steps.iter().enumerate() {
@@ -1890,7 +1884,7 @@ impl AiPanel {
             Some(IconName::Frame),
             format!("画布操作 · {} 步", steps.len()),
             open,
-            rgb(0x888888),
+            theme.muted_foreground,
             trailing,
             cx.listener(move |this, _, _, cx| {
                 if this.open_done_steps.contains(&key) {
@@ -1900,13 +1894,13 @@ impl AiPanel {
                 }
                 cx.notify();
             }),
-            body,
-        )
+            body, cx)
         .into_any_element()
     }
 }
 
-fn message_bubble(idx: usize, role: &str, content: String) -> Div {
+fn message_bubble(idx: usize, role: &str, content: String, cx: &App) -> Div {
+    let theme = crate::theme::chrome(cx);
     let is_user = role == "user";
     let id = if is_user {
         ElementId::named_usize("ai-msg-user", idx)
@@ -1924,7 +1918,7 @@ fn message_bubble(idx: usize, role: &str, content: String) -> Div {
             .max_w(px(360.0))
             .min_w_0()
             .child(TextView::markdown(id, content).selectable(true))
-            .bg(rgb(0xf0efec))
+            .bg(theme.muted)
     } else {
         // AI messages: plain text, no card background/border — content flows
         // naturally (reasoning → tools → text) without a visual container.
@@ -1950,14 +1944,15 @@ fn message_bubble(idx: usize, role: &str, content: String) -> Div {
 }
 
 /// Quiet header action: bare text that darkens on hover — no button chrome.
-fn header_action(label: &'static str) -> Stateful<Div> {
+fn header_action(label: &'static str, cx: &App) -> Stateful<Div> {
+    let theme = crate::theme::chrome(cx);
     div()
         .id(label)
         .px_1()
         .py(px(2.0))
         .text_xs()
-        .text_color(rgb(0x908e8a))
-        .hover(|s| s.text_color(rgb(0x1e1e1e)))
+        .text_color(theme.muted_foreground)
+        .hover(|s| s.text_color(theme.foreground))
         .cursor_pointer()
         .child(label)
 }
@@ -2027,12 +2022,6 @@ impl ToolOp {
             ToolOp::Other => "操作",
         }
     }
-    /// One neutral ink color for every operation: the verb in the title
-    /// already says what happened, and a rainbow of per-op colors reads as
-    /// noise in a long drawing session. Kept as a method so call sites stay.
-    fn color(&self) -> Rgba {
-        rgb(0x555555)
-    }
     /// Monochrome leading glyph per operation — a quiet visual anchor for
     /// each step row now that the emoji icons are gone.
     fn glyph(&self) -> IconName {
@@ -2051,7 +2040,7 @@ impl ToolOp {
 /// Build the step-header title and its color for a tool call. The icon + verb
 /// identify the operation type; the trailing detail identifies the target
 /// (shape + position for adds, element id for update/delete).
-fn tool_header(name: &str, args: &serde_json::Value) -> (String, Rgba) {
+fn tool_header(name: &str, args: &serde_json::Value) -> String {
     let op = tool_op(name);
     let title = match op {
         ToolOp::Add => {
@@ -2091,7 +2080,7 @@ fn tool_header(name: &str, args: &serde_json::Value) -> (String, Rgba) {
             format!("{}{}", op.verb(), tool_label(name))
         }
     };
-    (title, op.color())
+    title
 }
 
 /// Short (8-char) id prefix from a tool's args, if present (draw tools return
@@ -2211,9 +2200,10 @@ fn styled_body(
     window: &mut Window,
     cx: &mut App,
 ) -> impl IntoElement {
+        let theme = crate::theme::chrome(cx);
     let color = match kind {
-        StyledBodyKind::Reasoning => rgb(0x666666),
-        StyledBodyKind::Tool => rgb(0x444444),
+        StyledBodyKind::Reasoning => theme.muted_foreground,
+        StyledBodyKind::Tool => theme.foreground,
     };
     // Persisted per-body scroll handle: the wheel handler scrolls the box
     // manually, and the offset survives re-renders.
@@ -2237,7 +2227,7 @@ fn styled_body(
         .text_xs()
         .text_color(color)
         .border_l_1()
-        .border_color(rgb(0xeeeeec))
+        .border_color(theme.border)
         .pl_2()
         .py_1()
         .child(
@@ -2264,10 +2254,12 @@ fn plain_body(
     text: impl Into<SharedString>,
     scroll: &ScrollHandle,
     notify: EntityId,
+    cx: &App,
 ) -> Stateful<Div> {
+    let theme = crate::theme::chrome(cx);
     let color = match kind {
-        StyledBodyKind::Reasoning => rgb(0x666666),
-        StyledBodyKind::Tool => rgb(0x444444),
+        StyledBodyKind::Reasoning => theme.muted_foreground,
+        StyledBodyKind::Tool => theme.foreground,
     };
     let wheel = scroll.clone();
     div()
@@ -2283,7 +2275,7 @@ fn plain_body(
         .text_xs()
         .text_color(color)
         .border_l_1()
-        .border_color(rgb(0xeeeeec))
+        .border_color(theme.border)
         .pl_2()
         .py_1()
         .child(text.into())
@@ -2300,11 +2292,13 @@ fn step_toggle<B: IntoElement>(
     icon: Option<IconName>,
     title: impl Into<String>,
     open: bool,
-    title_color: Rgba,
+    title_color: Hsla,
     trailing_child: Option<Div>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     body: Option<B>,
+    cx: &App,
 ) -> impl IntoElement {
+    let theme = crate::theme::chrome(cx);
     let title = title.into();
     let mut header = div()
         .id(id)
@@ -2316,7 +2310,7 @@ fn step_toggle<B: IntoElement>(
         .text_xs()
         .text_color(title_color)
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(0xf5f5f5)).rounded_md());
+        .hover(|s| s.bg(theme.muted).rounded_md());
     if let Some(name) = icon {
         header = header.child(
             div()
@@ -2326,7 +2320,7 @@ fn step_toggle<B: IntoElement>(
                 .items_center()
                 .justify_center()
                 // A shade lighter than the title: anchor, not competition.
-                .text_color(rgb(0x9a9894))
+                .text_color(theme.muted_foreground)
                 .child(gpui_component::Icon::new(name)),
         );
     }
@@ -2337,7 +2331,7 @@ fn step_toggle<B: IntoElement>(
     header = header.child(
         div()
             .text_xs()
-            .text_color(rgb(0x888888))
+            .text_color(theme.muted_foreground)
             .opacity(0.0)
             .group_hover(group.clone(), |s| s.opacity(1.0))
             .child(if open { "▾" } else { "▸" }),
@@ -2563,7 +2557,7 @@ mod tests {
     #[test]
     fn use_skill_step_shows_skill_name() {
         let args: serde_json::Value = serde_json::from_str(r#"{"name":"mindmap"}"#).unwrap();
-        let (title, _) = tool_header("use_skill", &args);
+        let title = tool_header("use_skill", &args);
         assert_eq!(title, "加载技能 mindmap");
         let detail = tool_call_detail("use_skill", &args);
         assert!(detail.contains("mindmap"));
@@ -2663,39 +2657,39 @@ mod tests {
     #[test]
     fn tool_header_distinguishes_add_update_delete_query() {
         // Add: "新增矩形 (100,200)"
-        let (title, _) = tool_header(
+        let title = tool_header(
             "draw_rectangle",
             &serde_json::from_str(r#"{"x":100.0,"y":200.0,"w":10.0,"h":20.0}"#).unwrap(),
         );
         assert_eq!(title, "新增矩形 (100,200)");
 
         // Update carries the id + what changed (position, no arrow).
-        let (title, _) = tool_header(
+        let title = tool_header(
             "update_element",
             &serde_json::from_str(r#"{"id":"abc12345-aaaa-bbbb","x":5.0,"y":6.0}"#).unwrap(),
         );
         assert_eq!(title, "修改 #abc12345 位置 (5,6)");
 
         // Update of text only.
-        let (title, _) = tool_header(
+        let title = tool_header(
             "update_element",
             &serde_json::from_str(r#"{"id":"abc12345","text":"开始"}"#).unwrap(),
         );
         assert_eq!(title, "修改 #abc12345 文字「开始」");
 
         // Delete carries the id.
-        let (title, _) = tool_header(
+        let title = tool_header(
             "delete_element",
             &serde_json::from_str(r#"{"id":"abc12345-aaaa-bbbb"}"#).unwrap(),
         );
         assert_eq!(title, "删除 #abc12345");
 
         // Query needs no args.
-        let (title, _) = tool_header("list_elements", &serde_json::Value::Null);
+        let title = tool_header("list_elements", &serde_json::Value::Null);
         assert_eq!(title, "查询元素");
 
         // Clear canvas.
-        let (title, _) = tool_header("clear_canvas", &serde_json::Value::Null);
+        let title = tool_header("clear_canvas", &serde_json::Value::Null);
         assert_eq!(title, "清空画布");
         assert_eq!(tool_op("clear_canvas"), ToolOp::Clear);
     }

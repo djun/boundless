@@ -1,6 +1,7 @@
-//! App-wide settings page: an independent full-area overlay with a left
-//! navigation sidebar. All settings the app accumulates are consolidated
-//! here — the AI chat panel no longer hosts its own settings section.
+//! App-wide settings page: an independent full-area overlay built on the
+//! gpui-kit `Settings` component (sidebar + search + grouped items).
+//! All settings the app accumulates are consolidated here — the AI chat
+//! panel no longer hosts its own settings section.
 //!
 //! The page is owned by `BoardView` (created eagerly, shown via
 //! `settings_open`), rendered above all other chrome inside the board's
@@ -10,46 +11,19 @@
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::input::{Input, InputState};
+use gpui_component::setting::{
+    SettingGroup, SettingItem, SettingPage as KitSettingPage, Settings,
+};
 use gpui_component::{Icon, IconName};
 
 use crate::ai::settings::AiSettings;
 use crate::board::BoardView;
-
-/// One entry in the left navigation sidebar. Adding a settings section =
-/// a new variant here, a `label`/`icon` arm, and a render arm in `Render`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Section {
-    /// OpenAI-compatible endpoint, key, and model for the AI assistant.
-    AiModel,
-    /// The workspace directory holding boards and per-workspace data.
-    Workspace,
-}
-
-impl Section {
-    /// Sidebar order; future sections append here.
-    const ALL: &'static [Section] = &[Section::AiModel, Section::Workspace];
-
-    fn label(self) -> &'static str {
-        match self {
-            Section::AiModel => "AI 模型",
-            Section::Workspace => "工作区",
-        }
-    }
-
-    fn icon(self) -> IconName {
-        match self {
-            Section::AiModel => IconName::Bot,
-            Section::Workspace => IconName::FolderOpen,
-        }
-    }
-}
 
 /// The settings page entity. Lives for the whole session so the input states
 /// (and their IME state) survive open/close cycles; fields are re-synced from
 /// disk on every open.
 pub struct SettingsPage {
     board: WeakEntity<BoardView>,
-    active: Section,
     /// AI 模型 fields, single-line.
     base_url_input: Entity<InputState>,
     api_key_input: Entity<InputState>,
@@ -79,7 +53,6 @@ impl SettingsPage {
         });
         Self {
             board,
-            active: Section::AiModel,
             base_url_input,
             api_key_input,
             model_input,
@@ -171,173 +144,98 @@ impl Render for SettingsPage {
                     .child(Icon::new(IconName::Close)),
             );
 
-        // Left navigation sidebar: one row per section.
-        let mut sidebar = div()
-            .w(px(172.0))
-            .h_full()
-            .flex_shrink_0()
-            .flex()
-            .flex_col()
-            .gap_0p5()
-            .p_2()
-            .bg(rgb(0xfbfaf9))
-            .border_r_1()
-            .border_color(rgb(0xe3e2df));
-        for (i, section) in Section::ALL.iter().enumerate() {
-            let active = *section == self.active;
-            let mut row = div()
-                .id(("settings-nav", i))
-                .h_8()
-                .px_2()
-                .rounded_md()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap_2()
-                .text_sm()
-                .cursor_pointer()
-                .child(Icon::new(section.icon()))
-                .child(section.label());
-            row = if active {
-                row.bg(rgb(0xdce8ff)).text_color(rgb(0x1a5fd7))
-            } else {
-                row.text_color(rgb(0x444444)).hover(|s| s.bg(rgb(0xefeeec)))
-            };
-            sidebar = sidebar.child(row.on_click(cx.listener(move |this, _, _, cx| {
-                this.active = *section;
-                this.notice = None;
-                cx.notify();
-            })));
-        }
+        // ---- AI 模型 page ----
+        let base_url_input = self.base_url_input.clone();
+        let api_key_input = self.api_key_input.clone();
+        let model_input = self.model_input.clone();
+        let weak_save = cx.weak_entity();
+        let notice = self.notice.clone();
 
-        // Right content pane for the active section.
-        let content = match self.active {
-            Section::AiModel => self.render_ai_model(cx),
-            Section::Workspace => self.render_workspace(cx),
-        };
-
-        div()
-            .id("settings-page")
-            .absolute()
-            .inset_0()
-            .flex()
-            .flex_col()
-            .bg(rgb(0xffffff))
-            .child(header)
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .flex_row()
-                    .child(sidebar)
-                    .child(content),
-            )
-    }
-}
-
-impl SettingsPage {
-    fn render_ai_model(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let notice: Option<AnyElement> = match &self.notice {
-            Some((true, text)) => Some(
-                div()
+        let save_row = SettingItem::render(move |_, _, _| {
+            let weak_save = weak_save.clone();
+            let notice_el: AnyElement = match &notice {
+                Some((true, text)) => div()
                     .text_sm()
                     .text_color(rgb(0xc92a2a))
                     .child(text.clone())
                     .into_any_element(),
-            ),
-            Some((false, text)) => Some(
-                div()
+                Some((false, text)) => div()
                     .text_sm()
                     .text_color(rgb(0x2f9e44))
                     .child(text.clone())
                     .into_any_element(),
-            ),
-            None => None,
-        };
-        div()
-            .id("settings-content")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .px(px(32.0))
-            .py(px(24.0))
-            .child(
-                div()
-                    .w(px(520.0))
-                    .max_w_full()
-                    .flex()
-                    .flex_col()
-                    .gap_4()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("AI 模型"),
-                            )
-                            .child(div().text_sm().text_color(rgb(0x777777)).child(
-                                "配置 OpenAI 兼容接口，AI无界通过它调用模型、在画布上直接创作。",
-                            )),
-                    )
-                    .child(field_row("Base URL", &self.base_url_input))
-                    .child(field_row("API Key", &self.api_key_input))
-                    .child(field_row("模型", &self.model_input))
-                    .child(
-                        // Footer: save result (left) + save button (right).
-                        div()
-                            .flex()
-                            .flex_row()
-                            .items_center()
-                            .justify_between()
-                            .children(notice)
-                            .child(
-                                div()
-                                    .id("settings-save")
-                                    .h_7()
-                                    .px_3()
-                                    .rounded_md()
-                                    .flex()
-                                    .items_center()
-                                    .text_sm()
-                                    .cursor_pointer()
-                                    .bg(rgb(0x1a5fd7))
-                                    .text_color(rgb(0xffffff))
-                                    .hover(|s| s.bg(rgb(0x1550b8)))
-                                    .on_click(cx.listener(|this, _, _, cx| this.save(cx)))
-                                    .child("保存"),
-                            ),
-                    ),
-            )
-    }
+                None => div().into_any_element(),
+            };
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .child(notice_el)
+                .child(
+                    div()
+                        .id("settings-save")
+                        .h_7()
+                        .px_3()
+                        .rounded_md()
+                        .flex()
+                        .items_center()
+                        .text_sm()
+                        .cursor_pointer()
+                        .bg(rgb(0x1a5fd7))
+                        .text_color(rgb(0xffffff))
+                        .hover(|s| s.bg(rgb(0x1550b8)))
+                        .on_click(move |_, _, cx: &mut App| {
+                            weak_save
+                                .update(cx, |this, cx| this.save(cx))
+                                .ok();
+                        })
+                        .child("保存"),
+                )
+                .into_any_element()
+        });
 
-    /// 工作区 section: shows the active workspace root and lets the user
-    /// point the app at another directory. Switching routes chat sessions
-    /// into `<new-root>/.boundless/`, flushes and closes the current board.
-    fn render_workspace(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let ai_group = SettingGroup::new()
+            .item(
+                SettingItem::render(move |_, _, _| {
+                    field_row("Base URL", &base_url_input).into_any_element()
+                })
+                .keywords(["Base URL", "接口地址"]),
+            )
+            .item(
+                SettingItem::render(move |_, _, _| {
+                    field_row("API Key", &api_key_input).into_any_element()
+                })
+                .keywords(["API Key", "密钥"]),
+            )
+            .item(
+                SettingItem::render(move |_, _, _| {
+                    field_row("模型", &model_input).into_any_element()
+                })
+                .keywords(["模型", "model"]),
+            )
+            .item(save_row.keywords(["保存", "save"]));
+
+        let ai_page = KitSettingPage::new("AI 模型")
+            .icon(IconName::Bot)
+            .description("配置 OpenAI 兼容接口，AI无界通过它调用模型、在画布上直接创作。")
+            .default_open(true)
+            .group(ai_group);
+
+        // ---- 工作区 page ----
         let root_text = self
             .board
             .upgrade()
             .map(|b| b.read(cx).workspace_root().display().to_string())
             .unwrap_or_default();
-        div()
-            .id("settings-content")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .px(px(32.0))
-            .py(px(24.0))
-            .child(
+        let weak_ws = cx.weak_entity();
+
+        let ws_group = SettingGroup::new().item(
+            SettingItem::render(move |_, _, _| {
                 div()
-                    .w(px(520.0))
-                    .max_w_full()
                     .flex()
                     .flex_col()
-                    .gap_4()
+                    .gap_2()
                     .child(
                         div()
                             .flex()
@@ -345,23 +243,10 @@ impl SettingsPage {
                             .gap_1()
                             .child(
                                 div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("工作区"),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
+                                    .text_xs()
                                     .text_color(rgb(0x777777))
-                                    .child("白板文件保存在工作区目录下，对话记录等数据存放于 工作区/.boundless/。切换目录后即在新工作区中创作。"),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(div().text_xs().text_color(rgb(0x777777)).child("当前工作区"))
+                                    .child("当前工作区"),
+                            )
                             .child(
                                 div()
                                     .px_3()
@@ -371,7 +256,7 @@ impl SettingsPage {
                                     .border_color(rgb(0xe3e2df))
                                     .rounded_md()
                                     .text_sm()
-                                    .child(div().truncate().child(root_text)),
+                                    .child(div().truncate().child(root_text.clone())),
                             ),
                     )
                     .child(
@@ -393,29 +278,34 @@ impl SettingsPage {
                                     .bg(rgb(0x1a5fd7))
                                     .text_color(rgb(0xffffff))
                                     .hover(|s| s.bg(rgb(0x1550b8)))
-                                    .on_click(cx.listener(|_this, _, _, cx| {
-                                        // ⚠️ The modal folder picker must run outside this
-                                        // entity borrow: its message loop pumps GPUI tasks
-                                        // (e.g. the board's autosave ticker) that need the
-                                        // App borrow — borrowing re-entrantly panics the
-                                        // process. See board.rs `save` for the full story.
-                                        cx.spawn(async move |this, cx| {
-                                            if let Some(dir) = rfd::FileDialog::new()
-                                                .set_title("选择工作区目录")
-                                                .pick_folder()
-                                            {
-                                                this.update(cx, |this, cx| {
-                                                    if let Some(board) = this.board.upgrade() {
-                                                        board.update(cx, |board, cx| {
-                                                            board.switch_workspace(dir, cx)
-                                                        });
-                                                    }
-                                                })
-                                                .ok();
-                                            }
-                                        })
-                                        .detach();
-                                    }))
+                                    .on_click({
+                                        let weak_ws = weak_ws.clone();
+                                        move |_, _, cx: &mut App| {
+                                            // ⚠️ The modal folder picker must run outside
+                                            // any entity borrow: its message loop pumps
+                                            // GPUI tasks (e.g. the board's autosave
+                                            // ticker) that need the App borrow —
+                                            // borrowing re-entrantly panics the process.
+                                            let weak_pick = weak_ws.clone();
+                                            cx.spawn(async move |cx| {
+                                                if let Some(dir) = rfd::FileDialog::new()
+                                                    .set_title("选择工作区目录")
+                                                    .pick_folder()
+                                                {
+                                                    weak_pick
+                                                        .update(cx, |this: &mut SettingsPage, cx| {
+                                                            if let Some(board) = this.board.upgrade() {
+                                                                board.update(cx, |board, cx| {
+                                                                    board.switch_workspace(dir, cx)
+                                                                });
+                                                            }
+                                                        })
+                                                        .ok();
+                                                }
+                                            })
+                                            .detach();
+                                        }
+                                    })
                                     .child("更改目录…"),
                             )
                             // Secondary: back to ~/.boundless/workspace.
@@ -433,19 +323,54 @@ impl SettingsPage {
                                     .border_color(rgb(0xd6d4d0))
                                     .text_color(rgb(0x444444))
                                     .hover(|s| s.bg(rgb(0xefeeec)))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        if let Some(board) = this.board.upgrade() {
-                                            board.update(cx, |board, cx| {
-                                                board.switch_workspace(
-                                                    crate::workspace::Workspace::default_root(),
-                                                    cx,
-                                                )
-                                            });
+                                    .on_click({
+                                        let weak_ws = weak_ws.clone();
+                                        move |_, _, cx: &mut App| {
+                                            let weak_ws = weak_ws.clone();
+                                            weak_ws
+                                                .update(cx, |this: &mut SettingsPage, cx| {
+                                                    if let Some(board) = this.board.upgrade() {
+                                                        board.update(cx, |board, cx| {
+                                                            board.switch_workspace(
+                                                                crate::workspace::Workspace::default_root(),
+                                                                cx,
+                                                            )
+                                                        });
+                                                    }
+                                                })
+                                                .ok();
                                         }
-                                    }))
+                                    })
                                     .child("恢复默认位置"),
                             ),
-                    ),
+                    )
+                    .into_any_element()
+            })
+            .keywords(["工作区", "目录", "workspace"]),
+        );
+
+        let ws_page = KitSettingPage::new("工作区")
+            .icon(IconName::FolderOpen)
+            .description(
+                "白板文件保存在工作区目录下，对话记录等数据存放于 工作区/.boundless/。切换目录后即在新工作区中创作。",
+            )
+            .group(ws_group);
+
+        let settings = Settings::new("app-settings").pages([ai_page, ws_page]);
+
+        div()
+            .id("settings-page")
+            .absolute()
+            .inset_0()
+            .flex()
+            .flex_col()
+            .bg(rgb(0xffffff))
+            .child(header)
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(settings),
             )
     }
 }

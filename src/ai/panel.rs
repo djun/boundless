@@ -13,8 +13,9 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{InputEvent, Textarea, TextareaState};
+use gpui_component::notification::Notification;
 use gpui_component::text::TextView;
-use gpui_component::{Icon, IconName, Sizable};
+use gpui_component::{Icon, IconName, Sizable, WindowExt};
 
 use crate::board::BoardView;
 
@@ -883,6 +884,11 @@ impl Render for AiPanel {
                 input.update(cx, |s, cx| s.set_value("", window, cx));
             }
         }
+        // Flush pending notices as toasts: notice sources (session IO
+        // callbacks) run without a Window; render is where one appears.
+        if let Some(msg) = self.notice.take() {
+            window.push_notification(Notification::error(msg), cx);
+        }
         if self.compact {
             return self
                 .render_compact(f32::from(window.viewport_size().width), cx)
@@ -923,28 +929,8 @@ impl Render for AiPanel {
                     ),
             );
 
-        // Slim dismissible notice bar (session IO failures etc.), directly
-        // under the header. Click to dismiss.
-        let notice_bar = match self.notice.clone() {
-            Some(text) => div()
-                .id("panel-notice")
-                .flex()
-                .flex_row()
-                .items_center()
-                .px_3()
-                .py_1()
-                .bg(rgb(0xfff0f0))
-                .text_xs()
-                .text_color(rgb(0xc92a2a))
-                .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.notice = None;
-                    cx.notify();
-                }))
-                .child(text)
-                .into_any_element(),
-            None => div().hidden().into_any_element(),
-        };
+        // Notices now surface as app toasts (flushed at the top of render);
+        // no in-panel bar anymore.
 
         // ---- messages ----
         let mut messages = div().flex().flex_col().gap_3().px_4().py_4().w_full();
@@ -1199,7 +1185,6 @@ impl Render for AiPanel {
             // context (see main.rs), so this guard is unnecessary.
             .child(resize_handle)
             .child(header)
-            .child(notice_bar)
             .child(messages_area)
             .child(error_bar)
             .child(input_area)

@@ -26,7 +26,9 @@ use crate::text::{utf16_to_utf8, utf8_to_utf16, TextEditSession};
 use crate::tools::{ActiveTool, DragState, PointTarget};
 use crate::workspace::{self, Workspace};
 use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::{Icon, IconName, Sizable};
+use gpui_component::dialog::DialogButtonProps;
+use gpui_component::notification::Notification;
+use gpui_component::{Icon, IconName, Sizable, WindowExt};
 
 /// In-progress inline rename in the explorer: the workspace-relative path of
 /// the board/folder being renamed and its kind.
@@ -387,11 +389,6 @@ pub struct BoardView {
     /// Auto-update flow state (check / download / ready-to-restart). Driven by
     /// the `CheckForUpdates` action + a delayed startup poll; see `src/updater.rs`.
     update_state: crate::updater::UpdateState,
-    /// Whether the update confirm dialog is open (opened by clicking the
-    /// title-bar download icon; restart only happens after the user confirms).
-    update_dialog_open: bool,
-    /// Whether the about dialog (version info) is open.
-    about_open: bool,
     /// Per-element world-geometry cache (render/cache.rs): skips roughr
     /// generation and spline/ribbon rebuilds for unchanged elements. Pan/zoom
     /// never invalidates it; invalidation is by element fingerprint.
@@ -501,8 +498,6 @@ impl BoardView {
             explorer_sessions: HashMap::new(),
             chat_compact,
             update_state: crate::updater::UpdateState::default(),
-            update_dialog_open: false,
-            about_open: false,
             render_cache: crate::render::cache::RenderCache::new(),
             text_cache: crate::render::cache::TextCache::new(),
             canvas_cache: crate::render::raster::CanvasCache::new(),
@@ -792,12 +787,6 @@ impl BoardView {
         // The settings page absorbs Esc: close it instead of any canvas cancel.
         if self.settings_open {
             self.settings_open = false;
-            cx.notify();
-            return;
-        }
-        // The about dialog absorbs Esc the same way.
-        if self.about_open {
-            self.about_open = false;
             cx.notify();
             return;
         }
@@ -6506,6 +6495,13 @@ impl BoardView {
 
 impl Render for BoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Flush pending notices as toasts. Notice sources often run without a
+        // Window (async tasks, action handlers); render is where one is finally
+        // available, so parked messages become ephemeral toasts here instead of
+        // the old persistent bottom bar text.
+        if let Some(msg) = self.notice.take() {
+            window.push_notification(Notification::info(msg), cx);
+        }
         // Camera glide interpolation. Runs ahead of the presenting drift
         // refit (which is skipped while an anim is in flight, so the two
         // never fight); on completion the present-fit bookkeeping syncs.
@@ -6905,9 +6901,35 @@ impl Render for BoardView {
             .on_action(cx.listener(|this, _: &CheckForUpdates, _window, cx| {
                 this.check_for_updates(cx, false)
             }))
-            .on_action(cx.listener(|this, _: &About, _window, cx| {
-                this.about_open = true;
-                cx.notify();
+            .on_action(cx.listener(|_, _: &About, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| {
+                    dialog
+                        .title("关于无界白板")
+                        .content(|content, _, _| {
+                            content.child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_2()
+                                    .py_1()
+                                    .child(div().text_sm().child(format!(
+                                        "版本 v{}",
+                                        env!("CARGO_PKG_VERSION")
+                                    )))
+                                    .child(
+                                        div().text_sm().text_color(rgb(0x666666))
+                                            .child("无限手绘白板 —— AI 智能体直接在画布上作画。"),
+                                    )
+                                    .child(
+                                        div().text_sm().text_color(rgb(0x666666))
+                                            .child("以 AGPL-3.0 许可证开源。"),
+                                    ),
+                            )
+                        })
+                        .button_props(
+                            DialogButtonProps::default().ok_text("知道了").on_ok(|_, _, _| true),
+                        )
+                });
             }))
             .on_action(cx.listener(|this, _: &GotoPrevPage, _window, cx| this.goto_prev_page(cx)))
             .on_action(cx.listener(|this, _: &GotoNextPage, _window, cx| this.goto_next_page(cx)))
@@ -7001,10 +7023,6 @@ impl Render for BoardView {
             )
             // Dropdown overlay rendered last so it paints above the canvas.
             .when_some(menubar_dropdown, |d, dd| d.child(dd))
-            // Update confirm dialog paints above everything (menu bar
-            // included); it's an explicit user-opened modal.
-            .children(self.render_update_dialog(cx))
-            .children(self.render_about_dialog(cx))
             .child(self.render_tooltip())
     }
 }
@@ -7391,9 +7409,9 @@ impl BoardView {
                         .justify_center()
                         .hover(|s| s.bg(rgb(0xf1f0ee)))
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.update_dialog_open = true;
-                            cx.notify();
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            let weak = cx.weak_entity();
+                            open_update_dialog(window, cx, &this.update_state, &weak);
                         }))
                         .child(
                             div()
@@ -8893,14 +8911,44 @@ impl BoardView {
                     "关于".into(),
                     None,
                     true,
-                    move |_, _, cx| {
+                    move |_, window, cx| {
                         w_about
                             .update(cx, |this, cx| {
                                 this.menubar_open = None;
-                                this.about_open = true;
                                 cx.notify();
                             })
                             .ok();
+                        window.open_dialog(cx, |dialog, _, _| {
+                            dialog
+                                .title("关于无界白板")
+                                .content(|content, _, _| {
+                                    content.child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .gap_2()
+                                            .py_1()
+                                            .child(div().text_sm().child(format!(
+                                                "版本 v{}",
+                                                env!("CARGO_PKG_VERSION")
+                                            )))
+                                            .child(
+                                                div().text_sm().text_color(rgb(0x666666)).child(
+                                                    "无限手绘白板 —— AI 智能体直接在画布上作画。",
+                                                ),
+                                            )
+                                            .child(
+                                                div().text_sm().text_color(rgb(0x666666))
+                                                    .child("以 AGPL-3.0 许可证开源。"),
+                                            ),
+                                    )
+                                })
+                                .button_props(
+                                    DialogButtonProps::default()
+                                        .ok_text("知道了")
+                                        .on_ok(|_, _, _| true),
+                                )
+                        });
                     },
                 ));
             }
@@ -9347,12 +9395,8 @@ impl BoardView {
         } else if self.dirty {
             text.push_str("未保存 •");
         }
-        if let Some(notice) = &self.notice {
-            if !text.is_empty() {
-                text.push_str("　");
-            }
-            text.push_str(notice);
-        }
+        // Transient messages now surface as app toasts (flushed at the top
+        // of render); this bar is the persistent file/dirty status only.
         div()
             .absolute()
             // Stack above the page bar (which owns the bottom-left corner).
@@ -9362,239 +9406,6 @@ impl BoardView {
             .text_xs()
             .text_color(rgb(0x888888))
             .child(text)
-    }
-
-    /// Centered confirm dialog for the update flow, opened by clicking the
-    /// title-bar download icon: a ready update asks "restart now?"; a failed
-    /// update shows the error. The backdrop click only closes the dialog — the
-    /// underlying state (and the icon) stays, so a ready update never restarts
-    /// without an explicit 重启应用 click.
-    fn render_update_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        use crate::updater::UpdateState;
-        if !self.update_dialog_open {
-            return None;
-        }
-        let weak = cx.weak_entity();
-        let (title, body, restartable) = match &self.update_state {
-            UpdateState::Ready { version, notes, .. } => {
-                let mut body = format!("新版本 v{version} 已下载并通过签名校验，重启后生效。");
-                // First line of the release notes, char-safe truncated (the
-                // old banner sliced bytes, which panics mid-UTF-8 on Chinese).
-                if let Some(line) = notes.lines().next() {
-                    let line = line.trim();
-                    if !line.is_empty() {
-                        let max = 48usize;
-                        let short: String = line.chars().take(max).collect();
-                        body.push_str("\n更新内容：");
-                        body.push_str(&short);
-                        if line.chars().count() > max {
-                            body.push('…');
-                        }
-                    }
-                }
-                (format!("新版本 v{version} 已就绪"), body, true)
-            }
-            UpdateState::Error { message } => ("更新失败".to_string(), message.clone(), false),
-            // State changed while the dialog was open (e.g. install started) —
-            // drop the dialog.
-            _ => return None,
-        };
-
-        let later_btn = div()
-            .id("upd-later")
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .bg(rgb(0xf1f0ee))
-            .hover(|s| s.bg(rgb(0xebeaea)))
-            .cursor_pointer()
-            .text_sm()
-            .text_color(rgb(0x1e1e1e))
-            .on_click({
-                let weak = weak.clone();
-                move |_, _, cx| {
-                    let _ = weak.update(cx, |this, cx| {
-                        // Keep the Ready state (icon stays); just close.
-                        this.update_dialog_open = false;
-                        cx.notify();
-                    });
-                }
-            })
-            .child("稍后");
-        let restart_btn = div()
-            .id("upd-restart")
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .bg(rgb(0x1a5fd7))
-            .hover(|s| s.bg(rgb(0x154bb0)))
-            .cursor_pointer()
-            .text_sm()
-            .text_color(rgb(0xffffff))
-            .on_click({
-                let weak = weak.clone();
-                move |_, _, cx| {
-                    let _ = weak.update(cx, |this, cx| {
-                        this.update_dialog_open = false;
-                        this.install_and_restart(cx);
-                    });
-                }
-            })
-            .child("重启应用");
-        let ok_btn = div()
-            .id("upd-ok")
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .bg(rgb(0xf1f0ee))
-            .hover(|s| s.bg(rgb(0xebeaea)))
-            .cursor_pointer()
-            .text_sm()
-            .text_color(rgb(0x1e1e1e))
-            .on_click({
-                let weak = weak.clone();
-                move |_, _, cx| {
-                    let _ = weak.update(cx, |this, cx| {
-                        this.update_dialog_open = false;
-                        // Error is transient — acknowledge it back to Idle so
-                        // the red title-bar icon goes away.
-                        this.dismiss_update(cx);
-                    });
-                }
-            })
-            .child("知道了");
-
-        let buttons = if restartable {
-            div().flex().flex_row().justify_end().gap_2()
-        } else {
-            div()
-        }
-        .when(restartable, |d| d.child(later_btn).child(restart_btn))
-        .when(!restartable, |d| d.child(ok_btn));
-
-        Some(
-            div()
-                .absolute()
-                .inset_0()
-                .bg(gpui::black().opacity(0.28))
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    this.update_dialog_open = false;
-                    cx.notify();
-                }))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        // Clicks inside the card never reach the backdrop.
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .w(px(380.0))
-                        .bg(rgb(0xffffff))
-                        .border_1()
-                        .border_color(rgb(0xe3e2df))
-                        .rounded_lg()
-                        .shadow_lg()
-                        .p_4()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title),
-                        )
-                        .child(
-                            div().text_sm().text_color(rgb(0x666666)).child(body),
-                        )
-                        .child(
-                            div().flex().flex_row().justify_end().gap_2().mt_1().child(buttons),
-                        ),
-                )
-                .into_any_element(),
-        )
-    }
-
-    /// About dialog: name, version and license — the only in-app place to
-    /// read the running version. Opened from 帮助 → 关于 (and the app menu);
-    /// Esc or a backdrop click closes it, same as the update dialog.
-    fn render_about_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if !self.about_open {
-            return None;
-        }
-        let weak = cx.weak_entity();
-        let version = env!("CARGO_PKG_VERSION");
-        Some(
-            div()
-                .absolute()
-                .inset_0()
-                .bg(gpui::black().opacity(0.28))
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    this.about_open = false;
-                    cx.notify();
-                }))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        // Clicks inside the card never reach the backdrop.
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .w(px(380.0))
-                        .bg(rgb(0xffffff))
-                        .border_1()
-                        .border_color(rgb(0xe3e2df))
-                        .rounded_lg()
-                        .shadow_lg()
-                        .p_4()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("无界白板"),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(rgb(0x666666))
-                                .child(format!("版本 v{version}")),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(rgb(0x666666))
-                                .child("无限手绘白板 —— AI 智能体直接在画布上作画。"),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(rgb(0x666666))
-                                .child("以 AGPL-3.0 许可证开源。"),
-                        )
-                        .child(
-                            div().flex().flex_row().justify_end().mt_1().child(
-                                div()
-                                    .id("about-ok")
-                                    .px_3()
-                                    .py_1()
-                                    .rounded_md()
-                                    .bg(rgb(0xf1f0ee))
-                                    .hover(|s| s.bg(rgb(0xebeaea)))
-                                    .cursor_pointer()
-                                    .text_sm()
-                                    .text_color(rgb(0x1e1e1e))
-                                    .on_click(move |_, _, cx| {
-                                        let _ = weak.update(cx, |this, cx| {
-                                            this.about_open = false;
-                                            cx.notify();
-                                        });
-                                    })
-                                    .child("知道了"),
-                            ),
-                        ),
-                )
-                .into_any_element(),
-        )
     }
 
     /// The live hover tooltip: a dark chip below the cursor — label first,
@@ -9637,6 +9448,83 @@ impl BoardView {
             })
             .into_any_element()
     }
+}
+
+/// The update-confirm dialog (0.7 `open_dialog`): snapshot of `update_state`
+/// at open time. Ready → 稍后 / 重启应用 (restart installs); Error → 知道了
+/// (dismiss). Other states open nothing.
+fn open_update_dialog(
+    window: &mut Window,
+    cx: &mut App,
+    state: &crate::updater::UpdateState,
+    weak: &WeakEntity<BoardView>,
+) {
+    use crate::updater::UpdateState;
+    let (title, body, restartable) = match state {
+        UpdateState::Ready { version, notes, .. } => {
+            let mut body = format!("新版本 v{version} 已下载并通过签名校验，重启后生效。");
+            // First line of the release notes, char-safe truncated (the
+            // old banner sliced bytes, which panics mid-UTF-8 on Chinese).
+            if let Some(line) = notes.lines().next() {
+                let line = line.trim();
+                if !line.is_empty() {
+                    let max = 48usize;
+                    let short: String = line.chars().take(max).collect();
+                    body.push_str("\n更新内容：");
+                    body.push_str(&short);
+                    if line.chars().count() > max {
+                        body.push('…');
+                    }
+                }
+            }
+            (format!("新版本 v{version} 已就绪"), body, true)
+        }
+        UpdateState::Error { message } => ("更新失败".to_string(), message.clone(), false),
+        _ => return,
+    };
+    let weak_ok = weak.clone();
+    let weak_cancel = weak.clone();
+    // The open_dialog builder is an Fn (it may run again), so everything it
+    // hands inward is cloned per invocation rather than moved.
+    window.open_dialog(cx, move |dialog, _, _| {
+        let body = body.clone();
+        let weak_ok = weak_ok.clone();
+        let weak_cancel = weak_cancel.clone();
+        let dialog = dialog.title(title.clone()).content(move |content, _, _| {
+            content.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(0x666666))
+                    .py_1()
+                    .child(body.clone()),
+            )
+        });
+        if restartable {
+            dialog.button_props(
+                DialogButtonProps::default()
+                    .ok_text("重启应用")
+                    .cancel_text("稍后")
+                    .on_ok(move |_, _, cx| {
+                        weak_ok
+                            .update(cx, |this, cx| this.install_and_restart(cx))
+                            .ok();
+                        true
+                    })
+                    .on_cancel(|_, _, _| true),
+            )
+        } else {
+            dialog.button_props(
+                DialogButtonProps::default().ok_text("知道了").on_ok(move |_, _, cx| {
+                    // Error is transient — acknowledge it back to Idle so
+                    // the red title-bar icon goes away.
+                    weak_cancel
+                        .update(cx, |this, cx| this.dismiss_update(cx))
+                        .ok();
+                    true
+                }),
+            )
+        }
+    });
 }
 
 #[cfg(test)]
